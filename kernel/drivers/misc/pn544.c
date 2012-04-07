@@ -36,7 +36,7 @@
 #include <linux/spinlock.h>
 #include <linux/pn544.h>
 
-#define MAX_BUFFER_SIZE	256
+#define MAX_BUFFER_SIZE	512
 
 struct pn544_dev	{
 	wait_queue_head_t	read_wq;
@@ -171,28 +171,39 @@ static int pn544_dev_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int pn544_dev_ioctl(struct inode *inode, struct file *filp,
-		unsigned int cmd, unsigned long arg)
+static long pn544_dev_ioctl(struct file *filp,
+			    unsigned int cmd, unsigned long arg)
 {
 	struct pn544_dev *pn544_dev = filp->private_data;
 
 	switch (cmd) {
 	case PN544_SET_PWR:
-		if (arg > 1) {  /* enable with firmware download */
+		if (arg == 2) {
+			/* power on with firmware download (requires hw reset)
+			 */
 			pr_info("%s power on with firmware\n", __func__);
-			gpio_set_value(pn544_dev->firm_gpio, 1);
 			gpio_set_value(pn544_dev->ven_gpio, 1);
-			msleep(3);
-		} else if (arg == 1) {  /* enable */
+			gpio_set_value(pn544_dev->firm_gpio, 1);
+			msleep(20);
+			gpio_set_value(pn544_dev->ven_gpio, 0);
+			msleep(60);
+			gpio_set_value(pn544_dev->ven_gpio, 1);
+			msleep(20);
+		} else if (arg == 1) {
+			/* power on */
 			pr_info("%s power on\n", __func__);
 			gpio_set_value(pn544_dev->firm_gpio, 0);
 			gpio_set_value(pn544_dev->ven_gpio, 1);
-			msleep(3);
-		} else {
+			msleep(20);
+		} else  if (arg == 0) {
+			/* power off */
 			pr_info("%s power off\n", __func__);
 			gpio_set_value(pn544_dev->firm_gpio, 0);
 			gpio_set_value(pn544_dev->ven_gpio, 0);
-			msleep(7);
+			msleep(60);
+		} else {
+			pr_err("%s bad arg %lu\n", __func__, arg);
+			return -EINVAL;
 		}
 		break;
 	default:
@@ -209,7 +220,7 @@ static const struct file_operations pn544_dev_fops = {
 	.read	= pn544_dev_read,
 	.write	= pn544_dev_write,
 	.open	= pn544_dev_open,
-	.ioctl  = pn544_dev_ioctl,
+	.unlocked_ioctl	= pn544_dev_ioctl,
 };
 
 static int pn544_probe(struct i2c_client *client,

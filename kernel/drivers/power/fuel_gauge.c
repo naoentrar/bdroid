@@ -8,11 +8,6 @@
 #include <linux/jiffies.h>
 #include <linux/slab.h>
 
-#if defined(CONFIG_ARIES_NTT)
-unsigned int prevFGSOC = 0;
-unsigned int fg_zero_count = 0;
-#endif
-
 int fuel_guage_init;
 EXPORT_SYMBOL(fuel_guage_init);
 
@@ -86,67 +81,6 @@ int fg_read_soc(void)
 
 	temp = data[0] * 100 + ((data[1] * 100) / 256);
 
-#if defined(CONFIG_ARIES_NTT)
-
-#if 1 /* test7, DF06, change the rcomp to C0 */
-	if(temp >= 60)
-	{
-		if(temp >= 460)
-		{
-			temp_soc = (temp - 460)*8650/8740 + 1350;
-		}
-		else
-		{
-			temp_soc = (temp - 60)*1350/400;
-		}
-
-		if(temp_soc < 100)
-			temp_soc = 100; //1%
-	}
-	else
-	{
-		temp_soc = 0; //0%
-	}
-#endif
-
-	// rounding off and Changing to percentage.
-	soc=temp_soc/100;
-
-	if(temp_soc%100 >= 50 )
-	{
-		soc+=1;
-	}
-
-	if(soc>=100)
-	{
-		soc=100;
-	}
-
-	/* we judge real 0% after 3 continuous counting */
-	if(soc == 0)
-	{
-		fg_zero_count++;
-
-		if(fg_zero_count >= 3)
-		{
-			soc = 0;
-			fg_zero_count = 0;
-		}
-		else
-		{
-			soc = prevFGSOC;
-		}
-	}
-	else
-	{
-		fg_zero_count=0;
-	}
-
-	prevFGSOC = soc;
-
-#else // CONFIG_ARIES_NTT
-
-
 	if (temp >= 100)
 		temp_soc = temp;
 	else {
@@ -170,8 +104,6 @@ int fg_read_soc(void)
 	if (soc >= 100)
 		soc = 100;
 
-#endif // CONFIG_ARIES_NTT
-	
 	return soc;
 }
 
@@ -196,6 +128,7 @@ int fg_reset_soc(void)
 	}
 
 	msleep(500);
+
 	return ret;
 }
 
@@ -209,13 +142,8 @@ void fuel_gauge_rcomp(void)
 		return ;
 	}
 
-#if defined(CONFIG_ARIES_NTT)
-	rst_cmd[0] = 0xC0;
-	rst_cmd[1] = 0x00;
-#else
 	rst_cmd[0] = 0xB0;
 	rst_cmd[1] = 0x00;
-#endif
 
 	if (fg_i2c_write(client, RCOMP_REG, rst_cmd, 2) < 0)
 		pr_err("%s: failed fuel_gauge_rcomp\n", __func__);

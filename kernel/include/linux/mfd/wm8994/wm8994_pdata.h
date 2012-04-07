@@ -17,6 +17,7 @@
 
 struct wm8994_platform_data {
 	int ldo;
+	int ear_sel;
 	void (*set_mic_bias)(bool on);
 };
 

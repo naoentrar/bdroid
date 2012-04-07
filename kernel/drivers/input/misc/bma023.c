@@ -97,6 +97,7 @@
 #define DCM_IOC_MAGIC			's'
 #define BMA023_CALIBRATION		_IOWR(DCM_IOC_MAGIC, 48, short)
 
+static DEFINE_MUTEX(bma023_mutex);
 
 /* Acceleration measurement */
 struct acceleration {
@@ -353,14 +354,18 @@ static void bma023_work_func(struct work_struct *work)
 						  struct bma023_data, work);
 	struct acceleration accel;
 	unsigned long delay = delay_to_jiffies(atomic_read(&bma023->delay));
-
 	bma023_measure(bma023, &accel);
-
+	
+#if defined(CONFIG_SAMSUNG_CAPTIVATE)	
+	input_report_rel(bma023->input, REL_X, (-(accel.y)));
+	input_report_rel(bma023->input, REL_Y, accel.x);
+	input_report_rel(bma023->input, REL_Z, accel.z);
+#else
 	input_report_rel(bma023->input, REL_X, accel.x);
 	input_report_rel(bma023->input, REL_Y, accel.y);
 	input_report_rel(bma023->input, REL_Z, accel.z);
+#endif
 	input_sync(bma023->input);
-
 	schedule_delayed_work(&bma023->work, delay);
 }
 
@@ -831,13 +836,14 @@ static int bma023_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int bma023_ioctl(struct inode *inode, struct file *file,
-			unsigned int cmd, unsigned long arg)
+static int bma023_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct bma023_data *bma023 = file->private_data;
 	int try;
 	int err = 0;
 	unsigned char data[6];
+
+	mutex_lock(&bma023_mutex);
 
 	switch (cmd) {
 	case BMA023_CALIBRATION:
@@ -854,6 +860,9 @@ static int bma023_ioctl(struct inode *inode, struct file *file,
 	default:
 		break;
 	}
+
+	mutex_unlock(&bma023_mutex);
+
 	return 0;
 }
 
@@ -861,7 +870,7 @@ static const struct file_operations bma023_fops = {
 	.owner = THIS_MODULE,
 	.open = bma023_open,
 	.release = bma023_close,
-	.ioctl = bma023_ioctl,
+	.unlocked_ioctl = bma023_ioctl,
 };
 
 static int bma023_probe(struct i2c_client *client,
@@ -1020,4 +1029,4 @@ module_exit(bma023_exit);
 MODULE_DESCRIPTION("BMA023 accelerometer driver");
 MODULE_AUTHOR("tim.sk.lee@samsung.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(1.0.0);
+MODULE_VERSION("1.0.0");

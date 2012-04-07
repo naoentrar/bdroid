@@ -25,11 +25,13 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/gpio.h>
 #include <linux/input.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <asm/atomic.h>
 #include "yas529.h"
+#include <linux/yas529.h>
 
 #define YAS529_DEFAULT_CALIB_INTERVAL	50	/* 50 msecs */
 #define YAS529_DEFAULT_DATA_INTERVAL	200	/* 200 msecs */
@@ -151,6 +153,7 @@ static void geomagnetic_current_time(int32_t *sec, int32_t *msec);
 struct geomagnetic_data {
 	struct input_dev *input_data;
 	struct input_dev *input_raw;
+    struct yas529_platform_data *pdata;
 	struct delayed_work work;
 	struct semaphore driver_lock;
 	struct semaphore multi_lock;
@@ -2881,6 +2884,42 @@ geomagnetic_current_time(int32_t *sec, int32_t *msec)
 	*msec = tv.tv_usec / 1000;
 }
 
+static void yas529_reset(struct geomagnetic_data *data) {
+	int counter = 0;
+	uint8_t cmd[2] = { 0 };
+	struct i2c_msg i2cmsg[2];
+
+	i2cmsg[0].addr = this_client->addr;
+	i2cmsg[0].flags = 0;
+	i2cmsg[0].len = 1;
+	i2cmsg[0].buf = cmd;
+	i2cmsg[1].addr = this_client->addr;
+	i2cmsg[1].flags = 1;
+	i2cmsg[1].len = 2;
+	i2cmsg[1].buf = cmd;
+
+	cmd[0] = 0xd0;
+
+	for (counter = 0; counter < 3; counter++) {
+
+		gpio_set_value(data->pdata->reset_line, data->pdata->reset_asserted);
+		msleep(2);
+		gpio_set_value(data->pdata->reset_line, !data->pdata->reset_asserted);
+
+		if (i2c_transfer(this_client->adapter, i2cmsg, 2) < 0) {
+			dev_err(&this_client->dev, "[init] %d Read I2C ERROR!\n",
+				counter);
+	}
+	dev_err(&this_client->dev, "[init] %d DeviceID is %x %x\n",
+			counter, cmd[0], cmd[1]);
+	if (cmd[1] == 0x40)
+	break;
+	msleep(10);
+	cmd[0] = 0xd0;
+	cmd[1] = 0;
+	//yas529_init_sensor(data);
+	}
+}
 static int
 geomagnetic_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
@@ -2904,8 +2943,8 @@ geomagnetic_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		atomic_set(&data->last_data[i], 0);
 	atomic_set(&data->last_status, 0);
 	INIT_DELAYED_WORK(&data->work, geomagnetic_input_work_func);
-	init_MUTEX(&data->driver_lock);
-	init_MUTEX(&data->multi_lock);
+	sema_init(&data->driver_lock, 1);
+	sema_init(&data->multi_lock, 1);
 
 	input_data = input_allocate_device();
 	if (input_data == NULL) {
@@ -2915,14 +2954,14 @@ geomagnetic_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	input_data->name = GEOMAGNETIC_INPUT_NAME;
-	input_data->id.bustype = BUS_I2C;
+	//input_data->id.bustype = BUS_I2C;
 	set_bit(EV_REL, input_data->evbit);
 	input_set_capability(input_data, EV_REL, REL_X);
 	input_set_capability(input_data, EV_REL, REL_Y);
 	input_set_capability(input_data, EV_REL, REL_Z);
 	input_set_capability(input_data, EV_REL, REL_STATUS);
 	input_set_capability(input_data, EV_REL, REL_WAKE);
-	input_data->dev.parent = &client->dev;
+	//input_data->dev.parent = &client->dev;
 
 	rt = input_register_device(input_data);
 	if (rt) {
@@ -2948,8 +2987,10 @@ geomagnetic_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err;
 	}
 
+
+
 	input_raw->name = GEOMAGNETIC_INPUT_RAW_NAME;
-	input_raw->id.bustype = BUS_I2C;
+	//input_raw->id.bustype = BUS_I2C;
 	set_bit(EV_REL, input_raw->evbit);
 	input_set_capability(input_raw, EV_REL, REL_X);
 	input_set_capability(input_raw, EV_REL, REL_Y);
@@ -2958,7 +2999,7 @@ geomagnetic_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	input_set_capability(input_raw, EV_REL, REL_RAW_THRESHOLD);
 	input_set_capability(input_raw, EV_REL, REL_RAW_SHAPE);
 	input_set_capability(input_raw, EV_REL, REL_RAW_REPORT);
-	input_raw->dev.parent = &client->dev;
+	//input_raw->dev.parent = &client->dev;
 
 	rt = input_register_device(input_raw);
 	if (rt) {
@@ -2977,12 +3018,22 @@ geomagnetic_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 	sysfs_raw_created = 1;
 
+	data->pdata = client->dev.platform_data;
+	//mutex_init(&data->lock);
+
 	this_client = client;
 	data->input_raw = input_raw;
 	data->input_data = input_data;
 	input_set_drvdata(input_data, data);
 	input_set_drvdata(input_raw, data);
 	i2c_set_clientdata(client, data);
+
+	gpio_request(data->pdata->reset_line, "YAS529 Reset Line");
+	//if (err < 0)
+	//	goto exit_reset_gpio_request_failed;
+	gpio_direction_output(data->pdata->reset_line, !data->pdata->reset_asserted);
+
+	yas529_reset(data);
 
 	rt = geomagnetic_driver_init(&hwdep_driver);
 	if (rt < 0) {

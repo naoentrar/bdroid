@@ -20,15 +20,21 @@
 #include <mach/gpio.h>
 #include <mach/gpio-aries.h>
 
+#if defined(CONFIG_PHONE_ARIES_CDMA)
+#include "../../../drivers/misc/samsung_modemctl/dpram/onedram.h"
+#include "../../../drivers/misc/samsung_modemctl/dpram/modemctl.h"
+#else
 #include "../../../drivers/misc/samsung_modemctl/onedram/onedram.h"
 #include "../../../drivers/misc/samsung_modemctl/modemctl/modemctl.h"
+#endif
+
 
 /* onedram */
 static void onedram_cfg_gpio(void)
 {
 	s3c_gpio_cfgpin(GPIO_nINT_ONEDRAM_AP, S3C_GPIO_SFN(GPIO_nINT_ONEDRAM_AP_AF));
 	s3c_gpio_setpull(GPIO_nINT_ONEDRAM_AP, S3C_GPIO_PULL_UP);
-	set_irq_type(GPIO_nINT_ONEDRAM_AP, IRQ_TYPE_LEVEL_LOW);
+	irq_set_irq_type(GPIO_nINT_ONEDRAM_AP, IRQ_TYPE_LEVEL_LOW);
 }
 
 static struct onedram_platform_data onedram_data = {
@@ -61,10 +67,13 @@ static struct platform_device onedram = {
 /* Modem control */
 
 static void modemctl_cfg_gpio(void);
-#if defined(CONFIG_ARIES_EUR)
 static struct modemctl_platform_data mdmctl_data = {
 	.name = "xmm",
+#if defined(CONFIG_PHONE_ARIES_CDMA)
+	.gpio_phone_on = GPIO_PHONE_ON,
+#else
 	.gpio_phone_on = NULL,
+#endif
 	.gpio_phone_active = GPIO_PHONE_ACTIVE,
 	.gpio_pda_active = GPIO_PDA_ACTIVE,
 	.gpio_cp_reset = GPIO_CP_RST,
@@ -83,33 +92,6 @@ static struct resource mdmctl_res[] = {
 		.flags = IORESOURCE_IRQ,
 		},
 	};
-#elif defined(CONFIG_ARIES_NTT)
-static struct modemctl_platform_data mdmctl_data = {
-	.name = "msm",
-	.gpio_phone_on = GPIO_PHONE_ON,
-	.gpio_phone_active = GPIO_PHONE_ACTIVE,
-	.gpio_pda_active = GPIO_PDA_ACTIVE,
-	.gpio_cp_reset = GPIO_CP_RST,
-	.gpio_usim_boot = GPIO_USIM_BOOT,
-	.gpio_flm_sel = GPIO_FLM_SEL,
-	.cfg_gpio = modemctl_cfg_gpio,
-	};
-
-static struct resource mdmctl_res[] = {
-	[0] = {
-		.start = IRQ_EINT(19),
-		.end = IRQ_EINT(19),
-		.flags = IORESOURCE_IRQ,
-		},
-	[1] = {
-		.start = IRQ_EINT(27),
-		.end = IRQ_EINT(27),
-		.flags = IORESOURCE_IRQ,
-		},
-	};
-#else
-# error Need configuration (EUR/NTT)
-#endif
 
 static struct platform_device modemctl = {
 		.name = "modemctl",
@@ -130,13 +112,10 @@ static void modemctl_cfg_gpio(void)
 	unsigned gpio_cp_rst = mdmctl_data.gpio_cp_reset;
 	unsigned gpio_pda_active = mdmctl_data.gpio_pda_active;
 	unsigned gpio_sim_ndetect = mdmctl_data.gpio_sim_ndetect;
-#if defined(CONFIG_ARIES_NTT)
-	unsigned gpio_flm_sel = mdmctl_data.gpio_flm_sel;
-	unsigned gpio_usim_boot = mdmctl_data.gpio_usim_boot;
-	
-    	err = gpio_request(gpio_phone_on, "PHONE_ON");
-    	if (err) {
-    	    printk("fail to request gpio %s\n","PHONE_ON");
+#if defined(CONFIG_PHONE_ARIES_CDMA)
+	err = gpio_request(gpio_phone_on, "PHONE_ON");
+	if (err) {
+		printk("fail to request gpio %s\n","PHONE_ON");
 	} else {
 		gpio_direction_output(gpio_phone_on, GPIO_LEVEL_LOW);
 		s3c_gpio_setpull(gpio_phone_on, S3C_GPIO_PULL_NONE);
@@ -156,38 +135,21 @@ static void modemctl_cfg_gpio(void)
 		gpio_direction_output(gpio_pda_active, GPIO_LEVEL_HIGH);
 		s3c_gpio_setpull(gpio_pda_active, S3C_GPIO_PULL_NONE);
 	}
-
+#if !defined(CONFIG_PHONE_ARIES_CDMA)
 	if (mdmctl_data.gpio_reset_req_n) {
 		err = gpio_request(mdmctl_data.gpio_reset_req_n, "RST_REQN");
 		if (err) {
 			printk("fail to request gpio %s\n","RST_REQN");
 		}
 	}
-
-#if defined(CONFIG_ARIES_NTT)
-	err = gpio_request(gpio_flm_sel, "FLM_SEL");
-	if (err) {
-		printk("fail to request gpio %s\n","FLM_SEL");
-	} else {
-		gpio_direction_output(gpio_flm_sel, GPIO_LEVEL_LOW);
-		s3c_gpio_setpull(gpio_flm_sel, S3C_GPIO_PULL_NONE);
-	}
-	err = gpio_request(gpio_usim_boot, "USIM_BOOT");
-	if (err) {
-		printk("fail to request gpio %s\n","USIM_BOOT");
-	} else {
-		gpio_direction_output(gpio_usim_boot, GPIO_LEVEL_LOW);
-		s3c_gpio_setpull(gpio_usim_boot, S3C_GPIO_PULL_NONE);
-	}
 #endif
-
 	s3c_gpio_cfgpin(gpio_phone_active, S3C_GPIO_SFN(0xF));
 	s3c_gpio_setpull(gpio_phone_active, S3C_GPIO_PULL_NONE);
-	set_irq_type(gpio_phone_active, IRQ_TYPE_EDGE_BOTH);
+	irq_set_irq_type(gpio_phone_active, IRQ_TYPE_EDGE_BOTH);
 
 	s3c_gpio_cfgpin(gpio_sim_ndetect, S3C_GPIO_SFN(0xF));
 	s3c_gpio_setpull(gpio_sim_ndetect, S3C_GPIO_PULL_NONE);
-	set_irq_type(gpio_sim_ndetect, IRQ_TYPE_EDGE_BOTH);
+	irq_set_irq_type(gpio_sim_ndetect, IRQ_TYPE_EDGE_BOTH);
 }
 
 static int __init p1_init_phone_interface(void)

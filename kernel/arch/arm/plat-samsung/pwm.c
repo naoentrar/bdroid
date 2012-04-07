@@ -20,17 +20,9 @@
 #include <linux/io.h>
 #include <linux/pwm.h>
 
-#include <mach/irqs.h>
 #include <mach/map.h>
 
-#include <plat/devs.h>
 #include <plat/regs-timer.h>
-
-#if defined (CONFIG_WAVE_S8530)
-#include <mach/gpio.h>
-#include <mach/gpio-wave.h>
-#include <linux/delay.h>
-#endif
 
 struct pwm_device {
 	struct list_head	 list;
@@ -53,37 +45,6 @@ struct pwm_device {
 
 static struct clk *clk_scaler[2];
 static DEFINE_SPINLOCK(pwm_spin_lock);
-
-/* Standard setup for a timer block. */
-
-#define TIMER_RESOURCE_SIZE (1)
-
-#define TIMER_RESOURCE(_tmr, _irq)			\
-	(struct resource [TIMER_RESOURCE_SIZE]) {	\
-		[0] = {					\
-			.start	= _irq,			\
-			.end	= _irq,			\
-			.flags	= IORESOURCE_IRQ	\
-		}					\
-	}
-
-#define DEFINE_S3C_TIMER(_tmr_no, _irq)			\
-	.name		= "s3c24xx-pwm",		\
-	.id		= _tmr_no,			\
-	.num_resources	= TIMER_RESOURCE_SIZE,		\
-	.resource	= TIMER_RESOURCE(_tmr_no, _irq),	\
-
-/* since we already have an static mapping for the timer, we do not
- * bother setting any IO resource for the base.
- */
-
-struct platform_device s3c_device_timer[] = {
-	[0] = { DEFINE_S3C_TIMER(0, IRQ_TIMER0) },
-	[1] = { DEFINE_S3C_TIMER(1, IRQ_TIMER1) },
-	[2] = { DEFINE_S3C_TIMER(2, IRQ_TIMER2) },
-	[3] = { DEFINE_S3C_TIMER(3, IRQ_TIMER3) },
-	[4] = { DEFINE_S3C_TIMER(4, IRQ_TIMER4) },
-};
 
 static inline int pwm_is_tdiv(struct pwm_device *pwm)
 {
@@ -150,18 +111,6 @@ int pwm_enable(struct pwm_device *pwm)
 
 	spin_lock_irqsave(&pwm_spin_lock, flags);
 
-#if defined (CONFIG_WAVE_S8530) /* nat */
-	if (pwm->pwm_id==0) {
-		s3c_gpio_cfgpin(GPIO_LCD_BL_PWM,  (0x2 << 0));
-
-		/* PWM timer #0 output inverter bit in TCON for must be set.
-			After sleep out, the bit has been erased even though resume function did set.*/
-		tcon = __raw_readl(S3C2410_TCON);
-		tcon |= pwm_tcon_invert(pwm);
-		__raw_writel(tcon, S3C2410_TCON);
-	}
-#endif
-
 	if (!pwm->running) {
 		clk_enable(pwm->clk);
 		clk_enable(pwm->clk_div);
@@ -186,13 +135,6 @@ void pwm_disable(struct pwm_device *pwm)
 	unsigned long tcon;
 
 	spin_lock_irqsave(&pwm_spin_lock, flags);
-
-#if defined (CONFIG_WAVE_S8530) /* nat */
-	if (pwm->pwm_id==0) {
-		s3c_gpio_cfgpin(GPIO_LCD_BL_PWM, S3C_GPIO_OUTPUT);
-		gpio_set_value(GPIO_LCD_BL_PWM, 0);
-	}
-#endif	
 
 	if (pwm->running) {
 		tcon = __raw_readl(S3C2410_TCON);
@@ -309,18 +251,6 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 	tcon |= pwm_tcon_manulupdate(pwm);
 	tcon |= pwm_tcon_autoreload(pwm);
 	__raw_writel(tcon, S3C2410_TCON);
-	
-#if defined (CONFIG_WAVE_S8530) /* nat */
-	if (pwm->pwm_id==0) {
-		s3c_gpio_cfgpin(GPIO_LCD_BL_PWM,  (0x2 << 0));
-
-		/* PWM timer #0 output inverter bit in TCON for must be set.
-			After sleep out, the bit has been erased even though resume function did set.*/
-		tcon = __raw_readl(S3C2410_TCON);
-		tcon |= pwm_tcon_invert(pwm);
-		__raw_writel(tcon, S3C2410_TCON);
-	}
-#endif
 
 	tcon &= ~pwm_tcon_manulupdate(pwm);
 	__raw_writel(tcon, S3C2410_TCON);

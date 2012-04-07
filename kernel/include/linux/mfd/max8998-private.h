@@ -190,29 +190,6 @@ enum {
 #define MAX8998_MASK_RSTR	(0x3 << MAX8998_SHIFT_RSTR)
 #define MAX8998_MASK_ICHG	(0x7 << MAX8998_SHIFT_ICHG)
 
-#define MAX8998_TOPOFF_10	0
-#define MAX8998_TOPOFF_15	1
-#define MAX8998_TOPOFF_20	2
-#define MAX8998_TOPOFF_25	3
-#define MAX8998_TOPOFF_30	4
-#define MAX8998_TOPOFF_35	5
-#define MAX8998_TOPOFF_40	6
-#define MAX8998_TOPOFF_45	7
-
-#define MAX8998_RSTR_150	0
-#define MAX8998_RSTR_100	1
-#define MAX8998_RSTR_200	2
-#define MAX8998_RSTR_DISABLE	3
-
-#define MAX8998_ICHG_90		0
-#define MAX8998_ICHG_380	1
-#define MAX8998_ICHG_475	2
-#define MAX8998_ICHG_550	3
-#define MAX8998_ICHG_570	4
-#define MAX8998_ICHG_600	5
-#define MAX8998_ICHG_700	6
-#define MAX8998_ICHG_800	7
-
 /* CHGR2 */
 #define MAX8998_SHIFT_ESAFEOUT	6
 #define MAX8998_SHIFT_FT	4
@@ -225,29 +202,6 @@ enum {
 #define MAX8998_MASK_BATTSL	(0x1 << MAX8998_SHIFT_BATTSL)
 #define MAX8998_MASK_TMP	(0x3 << MAX8998_SHIFT_TMP)
 #define MAX8998_MASK_CHGEN	(0x1 << MAX8998_SHIFT_CHGEN)
-
-#define MAX8998_ESAFE_ALLOFF	0
-#define MAX8998_ESAFE_2ON	1
-#define MAX8998_ESAFE_1ON	2
-#define MAX8998_ESAFE_ALLON	3
-#define MAX8998_USB_VBUS_CP_ON	MAX8998_ESAFE_2ON
-#define MAX8998_USB_VBUS_AP_ON	MAX8998_ESAFE_1ON
-
-#define MAX8998_CHGTIME_5HR	0
-#define MAX8998_CHGTIME_6HR	1
-#define MAX8998_CHGTIME_7HR	2
-#define MAX8998_CHGTIME_DISABLE	3
-
-#define MAX8998_BATSEL_4_2V	0
-#define MAX8998_BATSEL_4_35V	1
-
-#define MAX8998_TEMPER_105	0
-#define MAX8998_TEMPER_160	1
-#define MAX8998_TEMPER_115	2
-#define MAX8998_TEMPER_135	3
-
-#define MAX8998_CHGEN_ENABLE	0
-#define MAX8998_CHGEN_DISABLE	1
 
 /* ONOFF1 */
 #define MAX8998_SHIFT_EN1	7
@@ -346,10 +300,12 @@ struct max8998_dev {
 	u8 irq_masks_cur[MAX8998_NUM_IRQ_REGS];
 	u8 irq_masks_cache[MAX8998_NUM_IRQ_REGS];
 	int type;
+	bool wakeup;
 };
 
 int max8998_irq_init(struct max8998_dev *max8998);
 void max8998_irq_exit(struct max8998_dev *max8998);
+int max8998_irq_resume(struct max8998_dev *max8998);
 
 extern int max8998_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest);
 extern int max8998_bulk_read(struct i2c_client *i2c, u8 reg, int count,

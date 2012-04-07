@@ -19,17 +19,24 @@
 #ifndef _CYPRESS_TOUCHKEY_H__
 #define _CYPRESS_TOUCHKEY_H__
 
-#define CYPRESS_TOUCHKEY_DEV_NAME "melfas_touchkey"
+#define CYPRESS_TOUCHKEY_DEV_NAME "cypress_touchkey"
 
 struct touchkey_platform_data {
 	int keycode_cnt;
 	const int *keycode;
 	void (*touchkey_onoff) (int);
+	void (*touchkey_sleep_onoff) (int);
+	const char *fw_name;
+	int scl_pin;
+	int sda_pin;
+	int en_pin;
 };
 
 enum {
 	TOUCHKEY_OFF,
 	TOUCHKEY_ON,
 };
+
+extern int touchkey_flash_firmware(struct touchkey_platform_data *, const u8 *);
 
 #endif /* _CYPRESS_TOUCHKEY_H__ */

@@ -1,6 +1,6 @@
 /**********************************************************************
  *
- * Copyright(c) 2008 Imagination Technologies Ltd. All rights reserved.
+ * Copyright (C) Imagination Technologies Ltd. All rights reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -41,13 +41,10 @@ extern "C"
 
 	
 
-	
 
 
 
-//2011.3.2
-//don't check data corruption	
-/*
+
 	IMG_BOOL MemCheck(const IMG_PVOID pvAddr, const IMG_UINT8 ui8Pattern, IMG_SIZE_T uSize)
 	{
 		IMG_UINT8 *pui8Addr;
@@ -152,7 +149,7 @@ extern "C"
 		}
 	}
 
-static	IMG_VOID debug_strcpy(IMG_CHAR *pDest, const IMG_CHAR *pSrc)
+	IMG_VOID debug_strcpy(IMG_CHAR *pDest, const IMG_CHAR *pSrc)
 	{
 		IMG_SIZE_T i = 0;
 
@@ -164,7 +161,7 @@ static	IMG_VOID debug_strcpy(IMG_CHAR *pDest, const IMG_CHAR *pSrc)
 			pSrc++;
 		}
 	}
-*/
+
 	PVRSRV_ERROR OSAllocMem_Debug_Wrapper(IMG_UINT32 ui32Flags,
 										  IMG_UINT32 ui32Size,
 										  IMG_PVOID *ppvCpuVAddr,
@@ -188,17 +185,14 @@ static	IMG_VOID debug_strcpy(IMG_CHAR *pDest, const IMG_CHAR *pSrc)
 			return eError;
 		}
 
-//2011.3.2
-//don't add data pattern
-	
-//		OSMemSet((IMG_CHAR *)(*ppvCpuVAddr) + TEST_BUFFER_PADDING_STATUS, 0xBB, ui32Size);
-//		OSMemSet((IMG_CHAR *)(*ppvCpuVAddr) + ui32Size + TEST_BUFFER_PADDING_STATUS, 0xB2, TEST_BUFFER_PADDING_AFTER);
+		OSMemSet((IMG_CHAR *)(*ppvCpuVAddr) + TEST_BUFFER_PADDING_STATUS, 0xBB, ui32Size);
+		OSMemSet((IMG_CHAR *)(*ppvCpuVAddr) + ui32Size + TEST_BUFFER_PADDING_STATUS, 0xB2, TEST_BUFFER_PADDING_AFTER);
 
 		
 		psInfo = (OSMEM_DEBUG_INFO *)(*ppvCpuVAddr);
 
 		OSMemSet(psInfo->sGuardRegionBefore, 0xB1, sizeof(psInfo->sGuardRegionBefore));
-//		debug_strcpy(psInfo->sFileName, pszFilename);
+		debug_strcpy(psInfo->sFileName, pszFilename);
 		psInfo->uLineNo = ui32Line;
 		psInfo->eValid = isAllocated;
 		psInfo->uSize = ui32Size;
@@ -224,13 +218,11 @@ static	IMG_VOID debug_strcpy(IMG_CHAR *pDest, const IMG_CHAR *pSrc)
 	{
 		OSMEM_DEBUG_INFO *psInfo;
 
-//2011.3.2
-//don't check data corruption		
-
-//		OSCheckMemDebug(pvCpuVAddr, ui32Size, pszFilename, ui32Line);
+		
+		OSCheckMemDebug(pvCpuVAddr, ui32Size, pszFilename, ui32Line);
 
 		
-//		OSMemSet(pvCpuVAddr, 0xBF, ui32Size + TEST_BUFFER_PADDING_AFTER);  
+		OSMemSet(pvCpuVAddr, 0xBF, ui32Size + TEST_BUFFER_PADDING_AFTER);  
 
 		
 		psInfo = (OSMEM_DEBUG_INFO *)((IMG_UINT32) pvCpuVAddr - TEST_BUFFER_PADDING_STATUS);
@@ -240,7 +232,7 @@ static	IMG_VOID debug_strcpy(IMG_CHAR *pDest, const IMG_CHAR *pSrc)
 		psInfo->uSizeParityCheck = 0;
 		psInfo->eValid = isFree;
 		psInfo->uLineNo = ui32Line;
-//		debug_strcpy(psInfo->sFileName, pszFilename);
+		debug_strcpy(psInfo->sFileName, pszFilename);
 
 		return OSFreeMem_Debug_Linux_Memory_Allocations(ui32Flags, ui32Size + TEST_BUFFER_PADDING, psInfo, hBlockAlloc, pszFilename, ui32Line);
 	}
@@ -252,4 +244,4 @@ static	IMG_VOID debug_strcpy(IMG_CHAR *pDest, const IMG_CHAR *pSrc)
 
 #endif 
 
-#endif        
+#endif 

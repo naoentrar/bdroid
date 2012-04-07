@@ -19,6 +19,8 @@ source "drivers/media/video/samsung/mfc50/Kconfig"
 source "drivers/media/video/samsung/jpeg_v2/Kconfig"
 source "drivers/media/video/samsung/tv20/Kconfig"
 #source "drivers/media/video/samsung/tsi/Kconfig"
+if CPU_S5PV210_EVT1
 #source "drivers/media/video/samsung/rotator/Kconfig"
-source "drivers/media/video/samsung/g2d/Kconfig"
+#source "drivers/media/video/samsung/g2d/Kconfig"
+endif
 endif

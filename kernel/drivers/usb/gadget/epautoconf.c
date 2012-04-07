@@ -128,6 +128,13 @@ ep_matches (
 		}
 	}
 
+	/*
+	 * If the protocol driver hasn't yet decided on wMaxPacketSize
+	 * and wants to know the maximum possible, provide the info.
+	 */
+	if (desc->wMaxPacketSize == 0)
+		desc->wMaxPacketSize = cpu_to_le16(ep->maxpacket);
+
 	/* endpoint maxpacket size is an input parameter, except for bulk
 	 * where it's an output parameter representing the full speed limit.
 	 * the usb spec fixes high speed bulk maxpacket at 512 bytes.
@@ -283,7 +290,6 @@ struct usb_ep *usb_ep_autoconfig (
 		if (ep && ep_matches (gadget, ep, desc))
 			return ep;
 #endif
-
 	} else if (gadget_is_s3c(gadget)) {
 		if (USB_ENDPOINT_XFER_INT == type) {
 			/* single buffering is enough */
@@ -296,12 +302,9 @@ struct usb_ep *usb_ep_autoconfig (
 			ep = find_ep (gadget, "ep9-int");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : It is refered from S1. samsung composite used many ep */
 			ep = find_ep (gadget, "ep12-int");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
-#endif
 		} else if (USB_ENDPOINT_XFER_BULK == type
 				&& (USB_DIR_IN & desc->bEndpointAddress)) {
 			ep = find_ep (gadget, "ep2-bulk");
@@ -313,15 +316,12 @@ struct usb_ep *usb_ep_autoconfig (
 			ep = find_ep (gadget, "ep8-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : It is refered from S1. samsung composite used many ep */
 			ep = find_ep (gadget, "ep11-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 			ep = find_ep (gadget, "ep14-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
-#endif
 		} else if (USB_ENDPOINT_XFER_BULK == type
 				&& !(USB_DIR_IN & desc->bEndpointAddress)) {
 			ep = find_ep (gadget, "ep1-bulk");
@@ -331,15 +331,12 @@ struct usb_ep *usb_ep_autoconfig (
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 			ep = find_ep (gadget, "ep7-bulk");
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : It is refered from S1. samsung composite used many ep */
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 			ep = find_ep (gadget, "ep10-bulk");
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 			ep = find_ep (gadget, "ep13-bulk");
-#endif
 			if (ep && ep_matches (gadget, ep, desc))
 				return ep;
 		}

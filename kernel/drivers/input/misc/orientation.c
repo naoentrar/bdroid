@@ -137,9 +137,9 @@ orientation_data_show(struct device *dev,
 
 	spin_lock_irqsave(&input_data->event_lock, flags);
 
-	x = input_data->abs[REL_X];
-	y = input_data->abs[REL_Y];
-	z = input_data->abs[REL_Z];
+	x = input_abs_get_val(input_data, REL_X);
+	y = input_abs_get_val(input_data, REL_Y);
+	z = input_abs_get_val(input_data, REL_Z);
 
 	spin_unlock_irqrestore(&input_data->event_lock, flags);
 
@@ -156,7 +156,7 @@ orientation_status_show(struct device *dev,
 
 	spin_lock_irqsave(&input_data->event_lock, flags);
 
-	status = input_data->abs[REL_STATUS];
+	status = input_abs_get_val(input_data, REL_STATUS);
 
 	spin_unlock_irqrestore(&input_data->event_lock, flags);
 
@@ -209,15 +209,33 @@ orientation_probe(struct platform_device *pdev)
 	}
 
 	set_bit(EV_REL, input_data->evbit);
-	input_set_capability(input_data, EV_REL, REL_X);
+	
+	// we now have to set params for each of these since the place to store them is
+	// allocated dynamically. For a REL axis like these, the min and max values are not
+	// considered when deciding how to handle the event, so they shouldn't matter.
+	// I just picked some values that seemed to make sense in terms of an orientation sensor
+	// just in case..
+	input_set_capability(input_data, EV_REL, REL_X);	
+	input_set_abs_params(input_data, REL_X, -3600, 3600, 0, 0);
+	
 	input_set_capability(input_data, EV_REL, REL_Y);
+	input_set_abs_params(input_data, REL_Y, -3600, 3600, 0, 0);
+	
 	input_set_capability(input_data, EV_REL, REL_Z);
+	input_set_abs_params(input_data, REL_Z, -3600, 3600, 0, 0);
+	
 	/* sattus */
 	input_set_capability(input_data, EV_REL, REL_STATUS);
+	input_set_abs_params(input_data, REL_STATUS, -3600, 3600, 0, 0);
+	
 	/* wake */
 	input_set_capability(input_data, EV_REL, REL_WAKE);
+	input_set_abs_params(input_data, REL_WAKE, -3600, 3600, 0, 0);
+	
 	/* enabled/delay */
 	input_set_capability(input_data, EV_REL, REL_CONTROL_REPORT);
+	input_set_abs_params(input_data, REL_CONTROL_REPORT, -3600, 3600, 0, 0);
+	
 	input_data->name = SENSOR_NAME;
 
 	err = input_register_device(input_data);

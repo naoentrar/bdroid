@@ -3,8 +3,6 @@
  * Copyright (C) 2010 Google, Inc.
  * Copyright (C) 2010 Samsung Electronics.
  *
- * Modified by Dominik Marszk according to Mocha AP-CP protocol
- *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -120,10 +118,7 @@ static const struct file_operations stats_ops = {
 
 static int log_open(struct inode *inode, struct file *file)
 {
-
-	pr_err("modem: log_open NOT IMPLEMENTED\n");
-	return -1;
-	/*struct modemctl *mc = inode->i_private;
+	struct modemctl *mc = inode->i_private;
 	unsigned long int flags;
 	int ret = 0;
 
@@ -151,7 +146,7 @@ static int log_open(struct inode *inode, struct file *file)
 		return -ETIMEDOUT;
 	} else {
 		return 0;
-	}*/
+	}
 }
 
 static int log_release(struct inode *inode, struct file *file)
@@ -166,10 +161,7 @@ static int log_release(struct inode *inode, struct file *file)
 static ssize_t log_read(struct file *filp, char __user *buf,
 			size_t count, loff_t *ppos)
 {
-
-	pr_err("modem: log_read NOT IMPLEMENTED\n");
-	return 0;
-	/*struct modemctl *mc = filp->private_data;
+	struct modemctl *mc = filp->private_data;
 	loff_t pos = *ppos;
 	int ret;
 
@@ -196,7 +188,7 @@ static ssize_t log_read(struct file *filp, char __user *buf,
 	mutex_unlock(&mc->ctl_lock);
 
 	modem_release_mmio(mc, 0);
-	return ret;*/
+	return ret;
 }
 
 static const struct file_operations log_ops = {

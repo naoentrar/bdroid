@@ -80,9 +80,8 @@ struct max8998_adc_table_data {
 	int temperature;
 };
 struct max8998_charger_callbacks {
-	void (*set_cable)(struct max8998_charger_callbacks *ptr, enum cable_type_t status);
-	bool (*set_esafe)(struct max8998_charger_callbacks *ptr, u8 esafe);
-	bool (*get_vdcin)(struct max8998_charger_callbacks *ptr);
+	void (*set_cable)(struct max8998_charger_callbacks *ptr,
+		enum cable_type_t status);
 };
 
 /**
@@ -104,23 +103,44 @@ struct max8998_charger_data {
  * @num_regulators: number of regultors used
  * @irq_base: base IRQ number for max8998, required for IRQs
  * @ono: power onoff IRQ number for max8998
- * @buck1_voltage_set[4]: BUCK1 voltage preset
- * @buck2_voltage_set[2]: BUCK2 voltage preset
+ * @buck_voltage_lock: Do NOT change the values of the following six
+ *   registers set by buck?_voltage?. The voltage of BUCK1/2 cannot
+ *   be other than the preset values.
+ * @buck1_voltage1: BUCK1 DVS mode 1 voltage register
+ * @buck1_voltage2: BUCK1 DVS mode 2 voltage register
+ * @buck1_voltage3: BUCK1 DVS mode 3 voltage register
+ * @buck1_voltage4: BUCK1 DVS mode 4 voltage register
+ * @buck2_voltage1: BUCK2 DVS mode 1 voltage register
+ * @buck2_voltage2: BUCK2 DVS mode 2 voltage register
  * @buck1_set1: BUCK1 gpio pin 1 to set output voltage
  * @buck1_set2: BUCK1 gpio pin 2 to set output voltage
+ * @buck1_default_idx: Default for BUCK1 gpio pin 1, 2
  * @buck2_set3: BUCK2 gpio pin to set output voltage
+ * @buck2_default_idx: Default for BUCK2 gpio pin.
+ * @wakeup: Allow to wake up from suspend
+ * @rtc_delay: LP3974 RTC chip bug that requires delay after a register
+ * write before reading it.
  */
 struct max8998_platform_data {
 	struct max8998_regulator_data	*regulators;
-	struct max8998_charger_data	*charger;
 	int				num_regulators;
 	int				irq_base;
 	int				ono;
-	int                             buck1_voltage_set[4];
-	int                             buck2_voltage_set[2];
+	bool				buck_voltage_lock;
+	int				buck1_voltage1;
+	int				buck1_voltage2;
+	int				buck1_voltage3;
+	int				buck1_voltage4;
+	int				buck2_voltage1;
+	int				buck2_voltage2;
 	int				buck1_set1;
 	int				buck1_set2;
+	int				buck1_default_idx;
 	int				buck2_set3;
+	int				buck2_default_idx;
+	bool				wakeup;
+	bool				rtc_delay;
+	struct max8998_charger_data	*charger;
 };
 
 #endif /*  __LINUX_MFD_MAX8998_H */

@@ -2,8 +2,6 @@
  * Copyright (C) 2010 Google, Inc.
  * Copyright (C) 2010 Samsung Electronics.
  *
- * Modified by Dominik Marszk according to Mocha AP-CP protocol
- *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -113,8 +111,17 @@ struct modemctl {
 	unsigned mmio_owner;
 	unsigned mmio_signal_bits;
 
-	struct m_fifo packet_tx;
-	struct m_fifo packet_rx;
+	struct m_fifo fmt_tx;
+	struct m_fifo fmt_rx;
+	struct m_fifo raw_tx;
+	struct m_fifo raw_rx;
+	struct m_fifo rfs_tx;
+	struct m_fifo rfs_rx;
+
+	struct wake_lock ip_tx_wakelock;
+	struct wake_lock ip_rx_wakelock;
+
+	struct net_device **ndev;
 
 	int open_count;
 	int status;
@@ -128,14 +135,17 @@ struct modemctl {
 	unsigned gpio_phone_active;
 	unsigned gpio_pda_active;
 	unsigned gpio_cp_reset;
-
 	unsigned gpio_phone_on;
-	unsigned gpio_usim_boot;
-	unsigned gpio_flm_sel;
+	bool is_cdma_modem;
+	int num_pdp_contexts;
+	bool is_modem_delta_update;
+	unsigned dpram_prev_phone_active;
+	unsigned dpram_prev_status;
 
 	struct miscdevice dev;
 
-	struct m_pipe packet_pipe;
+	struct m_pipe cmd_pipe;
+	struct m_pipe rfs_pipe;
 
 	struct mutex ctl_lock;
 	ktime_t mmio_t0;
@@ -151,6 +161,7 @@ struct modemctl {
 
 
 /* called when semaphore is held and there may be io to process */
+void modem_handle_io(struct modemctl *mc);
 void modem_update_state(struct modemctl *mc);
 
 /* called once at probe() */
@@ -197,39 +208,93 @@ void modem_debugfs_init(struct modemctl *mc);
 void modem_force_crash(struct modemctl *mc);
 
 /* protocol definitions */
+#define MB_VALID		0x0080
+#define MB_COMMAND		0x0040
 
-#define MB_REQ_SEM		0x1
-#define MB_REL_SEM		0x2
-#define MB_SEM_CTRL		0x1000
-#define MB_PACKET		0x20000
-#define MB_LPACKET		0x40000 //used in WAVE and newer
+/* CMD_INIT_END extended bit */
+#define CP_BOOT_ONLINE		0x0000
+#define CP_BOOT_AIRPLANE	0x1000
+#define AP_OS_ANDROID		0x0100
+#define AP_OS_WINMOBILE		0x0200
+#define AP_OS_LINUX		0x0300
+#define AP_OS_SYMBIAN		0x0400
 
+/* CMD_PHONE_START extended bit */
+#define CP_QUALCOMM		0x0100
+#define CP_INFINEON		0x0200
+#define CP_BROADCOM		0x0300
 
+#define MBC_NONE		0x0000
+#define MBC_INIT_START		0x0001
+#define MBC_INIT_END		0x0002
+#define MBC_REQ_ACTIVE		0x0003
+#define MBC_RES_ACTIVE		0x0004
+#define MBC_TIME_SYNC		0x0005
+#define MBC_POWER_OFF		0x0006
+#define MBC_RESET		0x0007
+#define MBC_PHONE_START		0x0008
+#define MBC_ERR_DISPLAY		0x0009
+#define MBC_SUSPEND		0x000A
+#define MBC_RESUME		0x000B
+#define MBC_EMER_DOWN		0x000C
+#define MBC_REQ_SEM		0x000D
+#define MBC_RES_SEM		0x000E
+#define MBC_MAX			0x000F
 
-#define MODEM_MSG_SBL_DONE			0x12341234
+/* data mailbox flags */
+#define MBD_SEND_FMT		0x0002
+#define MBD_SEND_RAW		0x0001
+#define MBD_SEND_RFS		0x0100
+
+#define MODEM_MSG_SBL_DONE		0x12341234
 #define MODEM_CMD_BINARY_LOAD		0x45674567
-#define MODEM_CMD_AMSSRUNREQ		0x89EF89EF
 #define MODEM_MSG_BINARY_DONE		0xabcdabcd
 
+#define MODEM_CMD_RAMDUMP_START		0xDEADDEAD
+#define MODEM_MSG_RAMDUMP_LARGE		0x0ADD0ADD // 16MB - 2KB
+#define MODEM_CMD_RAMDUMP_MORE		0xEDEDEDED
+#define MODEM_MSG_RAMDUMP_SMALL		0xFADEFADE // 5MB + 4KB
+
+#define MODEM_CMD_LOGDUMP_START		0x19732864
+//#define MODEM_MSG_LOGDUMP_DONE		0x28641973
+#define MODEM_MSG_LOGDUMP_DONE		0x00001973
+
+#define RAMDUMP_LARGE_SIZE	(16*1024*1024 - 2*1024)
+#define RAMDUMP_SMALL_SIZE	(5*1024*1024 + 4*1024)
 
 
 /* onedram shared memory map */
 #define OFF_MAGIC		0x00000000
 #define OFF_ACCESS		0x00000004
 
-#define OFF_PACKET_RX_HEAD		0x00000010
-#define OFF_PACKET_RX_TAIL		0x00000014
-#define OFF_PACKET_RX_DATA		0x00000020
+#define OFF_FMT_TX_HEAD		0x00000010
+#define OFF_FMT_TX_TAIL		0x00000014
+#define OFF_FMT_RX_HEAD		0x00000018
+#define OFF_FMT_RX_TAIL		0x0000001C
+#define OFF_RAW_TX_HEAD		0x00000020
+#define OFF_RAW_TX_TAIL		0x00000024
+#define OFF_RAW_RX_HEAD		0x00000028
+#define OFF_RAW_RX_TAIL		0x0000002C
+#define OFF_RFS_TX_HEAD		0x00000030
+#define OFF_RFS_TX_TAIL		0x00000034
+#define OFF_RFS_RX_HEAD		0x00000038
+#define OFF_RFS_RX_TAIL		0x0000003C
 
-#define OFF_PACKET_TX_HEAD		0x00200020
-#define OFF_PACKET_TX_TAIL		0x00200024
-#define OFF_PACKET_TX_DATA		0x00200030
+#define OFF_ERROR_MSG		0x00001000
+#define SIZ_ERROR_MSG		160
 
+#define OFF_FMT_TX_DATA		0x000FE000
+#define OFF_FMT_RX_DATA		0x000FF000
+#define SIZ_FMT_DATA		0x00001000
+#define OFF_RAW_TX_DATA		0x00100000
+#define OFF_RAW_RX_DATA		0x00200000
+#define SIZ_RAW_DATA		0x00100000
+#define OFF_RFS_TX_DATA		0x00300000
+#define OFF_RFS_RX_DATA		0x00400000
+#define SIZ_RFS_DATA		0x00100000
 
-#define SIZ_PACKET_DATA			0x00200000
-
-
-
+#define OFF_LOGDUMP_DATA	0x00A00000
+#define SIZ_LOGDUMP_DATA	0x00300000
 
 #define INIT_M_FIFO(name, type, dir, base) \
 	name.head = base + OFF_##type##_##dir##_HEAD; \

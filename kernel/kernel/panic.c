@@ -23,9 +23,12 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/dmi.h>
-#ifdef CONFIG_KERNEL_DEBUG_SEC
-#include <linux/kernel_sec_common.h>
-#endif
+
+#define PANIC_TIMER_STEP 100
+#define PANIC_BLINK_SPD 18
+
+/* Machine specific panic information string */
+char *mach_panic_string;
 
 int panic_on_oops;
 static unsigned long tainted_mask;
@@ -37,40 +40,20 @@ static DEFINE_SPINLOCK(pause_on_oops_lock);
 #define CONFIG_PANIC_TIMEOUT 0
 #endif
 int panic_timeout = CONFIG_PANIC_TIMEOUT;
+EXPORT_SYMBOL_GPL(panic_timeout);
 
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 
 EXPORT_SYMBOL(panic_notifier_list);
 
-/* Returns how long it waited in ms */
-long (*panic_blink)(long time);
-EXPORT_SYMBOL(panic_blink);
-
-static void panic_blink_one_second(void)
+static long no_blink(int state)
 {
-	static long i = 0, end;
-
-	if (panic_blink) {
-		end = i + MSEC_PER_SEC;
-
-		while (i < end) {
-			i += panic_blink(i);
-			mdelay(1);
-			i++;
-		}
-	} else {
-		/*
-		 * When running under a hypervisor a small mdelay may get
-		 * rounded up to the hypervisor timeslice. For example, with
-		 * a 1ms in 10ms hypervisor timeslice we might inflate a
-		 * mdelay(1) loop by 10x.
-		 *
-		 * If we have nothing to blink, spin on 1 second calls to
-		 * mdelay to avoid this.
-		 */
-		mdelay(MSEC_PER_SEC);
-	}
+	return 0;
 }
+
+/* Returns how long it waited in ms */
+long (*panic_blink)(int state);
+EXPORT_SYMBOL(panic_blink);
 
 /**
  *	panic - halt the system
@@ -84,7 +67,8 @@ NORET_TYPE void panic(const char * fmt, ...)
 {
 	static char buf[1024];
 	va_list args;
-	long i;
+	long i, i_next = 0;
+	int state = 0;
 
 	/*
 	 * It's possible to come here directly from a panic-assertion and
@@ -123,6 +107,9 @@ NORET_TYPE void panic(const char * fmt, ...)
 
 	bust_spinlocks(0);
 
+	if (!panic_blink)
+		panic_blink = no_blink;
+
 	if (panic_timeout > 0) {
 		/*
 		 * Delay timeout seconds before rebooting the machine.
@@ -130,25 +117,14 @@ NORET_TYPE void panic(const char * fmt, ...)
 		 */
 		printk(KERN_EMERG "Rebooting in %d seconds..", panic_timeout);
 
-#ifndef CONFIG_KERNEL_DEBUG_SEC
-		for (i = 0; i < panic_timeout; i++) {
+		for (i = 0; i < panic_timeout * 1000; i += PANIC_TIMER_STEP) {
 			touch_nmi_watchdog();
-			panic_blink_one_second();
+			if (i >= i_next) {
+				i += panic_blink(state ^= 1);
+				i_next = i + 3600 / PANIC_BLINK_SPD;
+			}
+			mdelay(PANIC_TIMER_STEP);
 		}
-#else
-		/*
-		 * TODO : debugLevel considerationi should be done. (tkhwang)
-		 *        bluescreen display will be necessary.
-		 */
-		kernel_sec_set_cp_upload(); 
-		kernel_sec_save_final_context();
-		if (0 == strcmp(fmt, "User Fault\n"))
-			kernel_sec_set_upload_cause(UPLOAD_CAUSE_USER_FAULT);
-		else
-			kernel_sec_set_upload_cause(UPLOAD_CAUSE_KERNEL_PANIC);
-
-		kernel_sec_hw_reset(false);
-#endif
 		/*
 		 * This will not be a clean reboot, with everything
 		 * shutting down.  But if there is a chance of
@@ -173,25 +149,14 @@ NORET_TYPE void panic(const char * fmt, ...)
 	}
 #endif
 	local_irq_enable();
-#ifndef CONFIG_KERNEL_DEBUG_SEC	
-	while (1) {
+	for (i = 0; ; i += PANIC_TIMER_STEP) {
 		touch_softlockup_watchdog();
-		panic_blink_one_second();
+		if (i >= i_next) {
+			i += panic_blink(state ^= 1);
+			i_next = i + 3600 / PANIC_BLINK_SPD;
+		}
+		mdelay(PANIC_TIMER_STEP);
 	}
-#else
-	/*
-	 * TODO : debugLevel considerationi should be done. (tkhwang)
-	 *        bluescreen display will be necessary.
-	 */
-	kernel_sec_set_cp_upload(); 
-	kernel_sec_save_final_context();
-	if (0 == strcmp(fmt, "User Fault\n"))
-		kernel_sec_set_upload_cause(UPLOAD_CAUSE_USER_FAULT);
-	else
-		kernel_sec_set_upload_cause(UPLOAD_CAUSE_KERNEL_PANIC);
-
-	kernel_sec_hw_reset(false);
-#endif		
 }
 
 EXPORT_SYMBOL(panic);
@@ -380,9 +345,14 @@ static int init_oops_id(void)
 }
 late_initcall(init_oops_id);
 
-static void print_oops_end_marker(void)
+void print_oops_end_marker(void)
 {
 	init_oops_id();
+
+	if (mach_panic_string)
+		printk(KERN_WARNING "Board Information: %s\n",
+		       mach_panic_string);
+
 	printk(KERN_WARNING "---[ end trace %016llx ]---\n",
 		(unsigned long long)oops_id);
 }
@@ -474,3 +444,13 @@ EXPORT_SYMBOL(__stack_chk_fail);
 
 core_param(panic, panic_timeout, int, 0644);
 core_param(pause_on_oops, pause_on_oops, int, 0644);
+
+static int __init oops_setup(char *s)
+{
+	if (!s)
+		return -EINVAL;
+	if (!strcmp(s, "panic"))
+		panic_on_oops = 1;
+	return 0;
+}
+early_param("oops", oops_setup);

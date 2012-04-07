@@ -38,11 +38,10 @@ struct clk_should_be_running {
 	const char *clk_name;
 	struct device *dev;
 };
+static spinlock_t pd_lock;
 
 static struct regulator_consumer_supply s5pv210_pd_audio_supply[] = {
-	REGULATOR_SUPPLY("pd", "s5pc1xx-iis.0"),
-	REGULATOR_SUPPLY("pd", "samsung-pcm.0"),
-	REGULATOR_SUPPLY("pd", "samsung-pcm.1"),
+	REGULATOR_SUPPLY("pd", "samsung-i2s.0"),
 };
 
 static struct regulator_consumer_supply s5pv210_pd_cam_supply[] = {
@@ -128,34 +127,29 @@ struct clk_should_be_running s5pv210_pd_audio_clk[] = {
 	{
 		.clk_name	= "i2scdclk",
 		.dev		= &s5pv210_device_iis0.dev,
-	},
-	{
-		.clk_name	= "pcm",
-		.dev		= &s5pv210_device_pcm1.dev,
-	},
-	{
+	}, {
 		/* end of the clock array */
 	},
 };
 
 struct clk_should_be_running s5pv210_pd_cam_clk[] = {
 	{
-		.clk_name	= "sclk_fimc_lclk",
+		.clk_name	= "fimc",
 		.dev		= &s3c_device_fimc0.dev,
 	}, {
-		.clk_name	= "sclk_fimc_lclk",
+		.clk_name	= "fimc",
 		.dev		= &s3c_device_fimc1.dev,
 	}, {
-		.clk_name	= "sclk_fimc_lclk",
+		.clk_name	= "fimc",
 		.dev		= &s3c_device_fimc2.dev,
 	}, {
 		.clk_name	= "sclk_csis",
-		.dev		= &s3c_device_csis.dev,
+		.dev		= &s5p_device_mipi_csis0.dev,
 	}, {
 		.clk_name	= "jpeg",
 		.dev		= &s3c_device_jpeg.dev,
 	}, {
-		.clk_name	= "rotator",
+		.clk_name	= "rot",
 		.dev		= &s5p_device_rotator.dev,
 	}, {
 		/* end of the clock array */
@@ -339,18 +333,25 @@ static int s5pv210_pd_pwr_off(int ctrl)
 
 static int s5pv210_pd_ctrl(int ctrlbit, int enable)
 {
-	u32 pd_reg = __raw_readl(S5P_NORMAL_CFG);
+	u32 pd_reg;
 
+	spin_lock(&pd_lock);
+	pd_reg = __raw_readl(S5P_NORMAL_CFG);
 	if (enable) {
 		__raw_writel((pd_reg | ctrlbit), S5P_NORMAL_CFG);
 		if (s5pv210_pd_pwr_done(ctrlbit))
-			return -ETIME;
+			goto out;
 	} else {
 		__raw_writel((pd_reg & ~(ctrlbit)), S5P_NORMAL_CFG);
 		if (s5pv210_pd_pwr_off(ctrlbit))
-			return -ETIME;
+			goto out;
 	}
+	spin_unlock(&pd_lock);
 	return 0;
+out:
+	spin_unlock(&pd_lock);
+	return -ETIME;
+
 }
 
 static int s5pv210_pd_clk_enable(struct clk_should_be_running *clk_run)
@@ -504,6 +505,7 @@ static int __devinit reg_s5pv210_pd_probe(struct platform_device *pdev)
 
 	drvdata->clk_run = config->clk_run;
 	drvdata->ctrlbit = config->ctrlbit;
+	spin_lock_init(&pd_lock);
 
 	drvdata->dev = regulator_register(&drvdata->desc, &pdev->dev,
 					  config->init_data, drvdata);

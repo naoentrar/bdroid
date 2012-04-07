@@ -21,7 +21,6 @@
 #include <linux/max17040_battery.h>
 #include <linux/slab.h>
 #include <linux/time.h>
-#include <linux/fs.h>
 
 #define MAX17040_VCELL_MSB	0x02
 #define MAX17040_VCELL_LSB	0x03
@@ -39,14 +38,11 @@
 #define MAX17040_DELAY		1000
 #define MAX17040_BATTERY_FULL	95
 
-#define MAX17040_MAJOR		174
-
 struct max17040_chip {
 	struct i2c_client		*client;
 	struct power_supply		battery;
 	struct max17040_platform_data	*pdata;
 	struct timespec			next_update_time;
-	struct device			*fg_atcmd;
 
 	/* State Of Connect */
 	int online;
@@ -57,9 +53,6 @@ struct max17040_chip {
 	/* State Of Charge */
 	int status;
 };
-
-extern struct class *sec_class;
-struct i2c_client *fg_i2c_client;
 
 static void max17040_update_values(struct max17040_chip *chip);
 
@@ -84,7 +77,7 @@ static int max17040_get_property(struct power_supply *psy,
 		val->intval = chip->online;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		val->intval = chip->vcell;
+		val->intval = chip->vcell * 1250;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = chip->soc;
@@ -128,7 +121,7 @@ static void max17040_get_vcell(struct i2c_client *client)
 	msb = max17040_read_reg(client, MAX17040_VCELL_MSB);
 	lsb = max17040_read_reg(client, MAX17040_VCELL_LSB);
 
-	chip->vcell = ((msb << 4) + (lsb >> 4)) * 1250;
+	chip->vcell = (msb << 4) + (lsb >> 4);
 }
 
 static void max17040_get_soc(struct i2c_client *client)
@@ -136,28 +129,39 @@ static void max17040_get_soc(struct i2c_client *client)
 	struct max17040_chip *chip = i2c_get_clientdata(client);
 	u8 msb;
 	u8 lsb;
-	uint pure_soc, adj_soc, soc;
+	u32 soc = 0;
+	u32 temp = 0;
+	u32 temp_soc = 0;
 
 	msb = max17040_read_reg(client, MAX17040_SOC_MSB);
 	lsb = max17040_read_reg(client, MAX17040_SOC_LSB);
 
-	pure_soc = msb * 100 + (lsb * 100) / 256;
+	temp = msb * 100 + ((lsb * 100) / 256);
 
-	if (pure_soc >= 100)
-		adj_soc = pure_soc;
-	else if (pure_soc >= 70)
-		adj_soc = 100; // 1%
+	if (temp >= 100)
+		temp_soc = temp;
+	else {
+		if (temp >= 70)
+			temp_soc = 100;
+		else
+			temp_soc = 0;
+	}
+
+	/* rounding off and Changing to percentage */
+	soc = temp_soc / 100;
+
+	if (temp_soc % 100 >= 50)
+		soc += 1;
+
+	if (soc >= 26)
+		soc += 4;
 	else
-		adj_soc = 0; // 0%
+		soc = (30 * temp_soc) / 26 / 100;
 
-	if (adj_soc < 1500)
-		soc = (adj_soc * 4 / 3 + 50) / 100;
-	else if (adj_soc < 7600)
-		soc = adj_soc / 100 + 5;
-	else
-		soc = ((adj_soc - 7600) * 8 / 10 + 50) / 100 + 81;
+	if (soc >= 100)
+		soc = 100;
 
-	chip->soc = min(soc, (uint)100);
+	chip->soc = soc;
 }
 
 static void max17040_get_version(struct i2c_client *client)
@@ -204,17 +208,6 @@ static void max17040_get_status(struct i2c_client *client)
 		chip->status = POWER_SUPPLY_STATUS_FULL;
 }
 
-static int max17040_reset_chip(struct i2c_client *client)
-{
-	int ret;
-	u16 rst_cmd = 0x4000;
-
-	ret = i2c_smbus_write_word_data(client, MAX17040_MODE_MSB, swab16(rst_cmd));
-	msleep(500);
-
-	return ret;
-}
-
 static void max17040_update_values(struct max17040_chip *chip)
 {
 	max17040_get_vcell(chip->client);
@@ -227,37 +220,6 @@ static void max17040_update_values(struct max17040_chip *chip)
 	monotonic_to_bootbased(&chip->next_update_time);
 	chip->next_update_time.tv_sec++;
 }
-
-void max17040_reset_soc(void)
-{
-	struct i2c_client *client = fg_i2c_client;
-	max17040_reset_chip(client);
-}
-EXPORT_SYMBOL(max17040_reset_soc);
-
-static ssize_t max17040_show_fg_soc(struct device *device,
-				    struct device_attribute *attr, char *buf)
-{
-	struct max17040_chip *chip = (struct max17040_chip *)dev_get_drvdata(device);
-
-	max17040_get_soc(chip->client);
-
-	return sprintf(buf, "%d\n", chip->soc);	
-}
-static DEVICE_ATTR(set_fuel_gauage_read, 0664, max17040_show_fg_soc, NULL);
-
-static ssize_t max17040_show_fg_reset(struct device *device,
-				      struct device_attribute *attr, char *buf)
-{
-	struct max17040_chip *chip = (struct max17040_chip *)dev_get_drvdata(device);
-	int ret;
-
-	ret = max17040_reset_chip(chip->client);
-	max17040_get_soc(chip->client);
-
-	return sprintf(buf,"%d\n", ret);
-}
-static DEVICE_ATTR(set_fuel_gauage_reset, 0664, max17040_show_fg_reset, NULL);
 
 static enum power_supply_property max17040_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
@@ -280,7 +242,7 @@ static int __devinit max17040_probe(struct i2c_client *client,
 	if (!chip)
 		return -ENOMEM;
 
-	chip->client = fg_i2c_client = client;
+	chip->client = client;
 	chip->pdata = client->dev.platform_data;
 
 	i2c_set_clientdata(client, chip);
@@ -299,57 +261,22 @@ static int __devinit max17040_probe(struct i2c_client *client,
 		ret = power_supply_register(&client->dev, &chip->battery);
 	if (ret) {
 		dev_err(&client->dev, "failed: power supply register\n");
-		goto err_psy_register;
+		kfree(chip);
+		return ret;
 	}
 
 	max17040_get_version(client);
 
 	if (chip->pdata)
 		i2c_smbus_write_word_data(client, MAX17040_RCOMP_MSB,
-					  swab16(chip->pdata->rcomp_value));
-
-	chip->fg_atcmd = device_create(sec_class, NULL, MKDEV(MAX17040_MAJOR, 0),
-					NULL, "fg_atcom_test");
-	if (IS_ERR(chip->fg_atcmd)) {
-		dev_err(&client->dev, "failed to create fg_atcmd\n");
-		goto err_fg_atcmd;
-	}
-
-	dev_set_drvdata(chip->fg_atcmd, chip);
-
-	ret = device_create_file(chip->fg_atcmd, &dev_attr_set_fuel_gauage_read);
-	if (ret)
-		goto err_fg_read;
-
-	ret = device_create_file(chip->fg_atcmd, &dev_attr_set_fuel_gauage_reset);
-	if (ret)
-		goto err_fg_reset;
+			swab16(chip->pdata->rcomp_value));
 
 	return 0;
-
-err_fg_reset:
-	device_remove_file(chip->fg_atcmd, &dev_attr_set_fuel_gauage_read);
-err_fg_read:
-	device_destroy(sec_class, MKDEV(MAX17040_MAJOR, 0));
-err_fg_atcmd:
-	if (chip->pdata && chip->pdata->power_supply_unregister)
-		chip->pdata->power_supply_unregister(&chip->battery);
-	else
-		power_supply_unregister(&chip->battery);
-
-err_psy_register:
-	kfree(chip);
-
-	return ret;
 }
 
 static int __devexit max17040_remove(struct i2c_client *client)
 {
 	struct max17040_chip *chip = i2c_get_clientdata(client);
-
-	device_remove_file(chip->fg_atcmd, &dev_attr_set_fuel_gauage_reset);
-	device_remove_file(chip->fg_atcmd, &dev_attr_set_fuel_gauage_read);
-	device_destroy(sec_class, MKDEV(MAX17040_MAJOR, 0));
 
 	if (chip->pdata && chip->pdata->power_supply_unregister)
 		chip->pdata->power_supply_unregister(&chip->battery);

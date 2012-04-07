@@ -39,318 +39,13 @@
 #include <plat/media.h>
 #include <plat/jpeg.h>
 #include <mach/media.h>
-
-/* Android Gadget */
-#include <linux/usb/android_composite.h>
-#define S3C_VENDOR_ID			0x18d1
-#define S3C_UMS_PRODUCT_ID		0x4E21
-#define S3C_UMS_ADB_PRODUCT_ID		0x4E22
-#define S3C_RNDIS_PRODUCT_ID		0x4E23
-#define S3C_RNDIS_ADB_PRODUCT_ID	0x4E24
-#define MAX_USB_SERIAL_NUM	17
-
-static char *usb_functions_ums[] = {
-	"usb_mass_storage",
-};
-#if !defined(CONFIG_ARIES_NTT) // disable tethering
-static char *usb_functions_rndis[] = {
-	"rndis",
-};
-#endif
-
-/*
-static char *usb_functions_rndis_adb[] = {
-	"rndis",
-	"adb",
-};
-*/
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* Do not use below compoiste */
-#else
-static char *usb_functions_ums_adb[] = {
-	"usb_mass_storage",
-	"adb",
-};
-#endif
-
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : Variables for samsung composite such as kies, mtp, ums, etc... */
-/* kies mode */
-static char *usb_functions_acm_mtp[] = {
-	"acm",
-	"mtp",
-};
-/* debug mode */
-static char *usb_functions_acm_ums_adb[] = {
-	"acm",
-	"usb_mass_storage",
-	"adb",
-};
-/* mtp only mode */
-static char *usb_functions_mtp[] = {
-	"mtp",
-};
-#endif
-
-static char *usb_functions_all[] = {
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : Every function driver for samsung composite.
- *  		  Number of to enable function features have to be same as below.
- */
-	"acm",
-	"usb_mass_storage",
-	"adb",
-#if !defined(CONFIG_ARIES_NTT) // disable tethering
-	"rndis",
-#endif	
-	"mtp",
-#else /* original */
-#  ifdef CONFIG_USB_ANDROID_RNDIS
-	"rndis",
-#  endif
-	"usb_mass_storage",
-	"adb",
-#  ifdef CONFIG_USB_ANDROID_ACM
-	"acm",
-#  endif
-#endif /* CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE */
-};
-
-
-static struct android_usb_product usb_products[] = {
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : Please modify below value correctly if you customize composite */
-#  ifdef CONFIG_USB_ANDROID_SAMSUNG_ESCAPE /* USE DEVGURU HOST DRIVER */
-	{
-		.product_id	= SAMSUNG_DEBUG_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_acm_ums_adb),
-		.functions	= usb_functions_acm_ums_adb,
-		.bDeviceClass	= 0xEF,
-		.bDeviceSubClass= 0x02,
-		.bDeviceProtocol= 0x01,
-		.s		= ANDROID_DEBUG_CONFIG_STRING,
-		.mode		= USBSTATUS_ADB,
-	},
-	{
-		.product_id	= SAMSUNG_KIES_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_acm_mtp),
-		.functions	= usb_functions_acm_mtp,
-		.bDeviceClass	= 0xEF,
-		.bDeviceSubClass= 0x02,
-		.bDeviceProtocol= 0x01,
-		.s		= ANDROID_KIES_CONFIG_STRING,
-		.mode		= USBSTATUS_SAMSUNG_KIES,
-	},
-	{
-		.product_id	= SAMSUNG_UMS_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_ums),
-		.functions	= usb_functions_ums,
-		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0,
-		.s		= ANDROID_UMS_CONFIG_STRING,
-		.mode		= USBSTATUS_UMS,
-	},
-#if !defined(CONFIG_ARIES_NTT) // disable tethering
-	{
-		.product_id	= SAMSUNG_RNDIS_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
-		.functions	= usb_functions_rndis,
-#    ifdef CONFIG_USB_ANDROID_SAMSUNG_RNDIS_WITH_MS_COMPOSITE
-		.bDeviceClass	= 0xEF,
-		.bDeviceSubClass= 0x02,
-		.bDeviceProtocol= 0x01,
-#    else
-#      ifdef CONFIG_USB_ANDROID_RNDIS_WCEIS
-		.bDeviceClass	= USB_CLASS_WIRELESS_CONTROLLER,
-#      else
-		.bDeviceClass	= USB_CLASS_COMM,
-#      endif
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0,
-#    endif
-		.s		= ANDROID_RNDIS_CONFIG_STRING,
-		.mode		= USBSTATUS_VTP,
-	},
-#endif	
-	{
-		.product_id	= SAMSUNG_MTP_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_mtp),
-		.functions	= usb_functions_mtp,
-		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0x01,
-		.s		= ANDROID_MTP_CONFIG_STRING,
-		.mode		= USBSTATUS_MTPONLY,
-	},
-
-#  else  /* USE MCCI HOST DRIVER */
-	{
-		.product_id	= SAMSUNG_DEBUG_PRODUCT_ID, /* change sequence */
-		.num_functions	= ARRAY_SIZE(usb_functions_acm_ums_adb),
-		.functions	= usb_functions_acm_ums_adb,
-		.bDeviceClass	= USB_CLASS_COMM,
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0,
-		.s		= ANDROID_DEBUG_CONFIG_STRING,
-		.mode		= USBSTATUS_ADB,
-	},
-	{
-		.product_id	= SAMSUNG_KIES_PRODUCT_ID, /* change sequence */
-		.num_functions	= ARRAY_SIZE(usb_functions_acm_mtp),
-		.functions	= usb_functions_acm_mtp,
-		.bDeviceClass	= USB_CLASS_COMM,
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0,
-		.s		= ANDROID_KIES_CONFIG_STRING,
-		.mode		= USBSTATUS_SAMSUNG_KIES,
-
-	},
-	{
-		.product_id	= SAMSUNG_UMS_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_ums),
-		.functions	= usb_functions_ums,
-		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0,
-		.s		= ANDROID_UMS_CONFIG_STRING,
-		.mode		= USBSTATUS_UMS,
-	},
-#if !defined(CONFIG_ARIES_NTT) // disable tethering
-	{
-		.product_id	= SAMSUNG_RNDIS_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
-		.functions	= usb_functions_rndis,
-#    ifdef CONFIG_USB_ANDROID_RNDIS_WCEIS
-		.bDeviceClass	= USB_CLASS_WIRELESS_CONTROLLER,
-#    else
-		.bDeviceClass	= USB_CLASS_COMM,
-#    endif
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0,
-		.s		= ANDROID_RNDIS_CONFIG_STRING,
-		.mode		= USBSTATUS_VTP,
-	},
-#endif	
-	{
-		.product_id	= SAMSUNG_MTP_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_mtp),
-		.functions	= usb_functions_mtp,
-		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
-		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0x01,
-		.s		= ANDROID_MTP_CONFIG_STRING,
-		.mode		= USBSTATUS_MTPONLY,
-	},
-#  endif
-#else /* original */
-	{
-		.product_id	= S3C_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_ums),
-		.functions	= usb_functions_ums,
-	},
-	{
-		.product_id	= S3C_ADB_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_ums_adb),
-		.functions	= usb_functions_ums_adb,
-	},
-#endif
-};
-// serial number should be changed as real device for commercial release
-static char device_serial[MAX_USB_SERIAL_NUM] = "0123456789ABCDEF";
-/* standard android USB platform data */
-
-/* Information should be changed as real product for commercial release */
-static struct android_usb_platform_data android_usb_pdata = {
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-/* soonyong.cho : refered from S1 */
-	.vendor_id		= SAMSUNG_VENDOR_ID,
-	.product_id		= SAMSUNG_KIES_PRODUCT_ID,
-	.manufacturer_name	= "SAMSUNG",
-	.product_name		= "SAMSUNG_Android",
-#else
-	.vendor_id		= S3C_VENDOR_ID,
-	.product_id		= S3C_PRODUCT_ID,
-	.manufacturer_name	= "Android",//"Samsung",
-	.product_name		= "Android",//"Samsung SMDKV210",
-#endif
-	.serial_number		= device_serial,
-	.num_products		= ARRAY_SIZE(usb_products),
-	.products		= usb_products,
-	.num_functions		= ARRAY_SIZE(usb_functions_all),
-	.functions		= usb_functions_all,
-};
-
-static struct usb_ether_platform_data rndis_pdata = {
-	/* ethaddr is filled by board_serialno_setup */
-	.vendorID	= 0x18d1,
-	.vendorDescr	= "Samsung",
-};
-
-struct platform_device s3c_device_rndis = {
-	.name	= "rndis",
-	.id	= -1,
-	.dev	= {
-		.platform_data = &rndis_pdata,
-	},
-};
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-void __init s3c_usb_set_serial(void)
-{
-# ifdef CONFIG_USB_ANDROID_RNDIS
-	int i;
-	char *src;
-# endif
-
-	sprintf(device_serial, "%08X%08X", system_serial_high,
-			system_serial_low);
-# ifdef CONFIG_USB_ANDROID_RNDIS
-	/* create a fake MAC address from our serial number.
-	 * first byte is 0x02 to signify locally administered.
-	 */
-	src = device_serial;
-	rndis_pdata.ethaddr[0] = 0x02;
-	for (i = 0; *src; i++) {
-		/* XOR the USB serial across the remaining bytes */
-		rndis_pdata.ethaddr[i % (ETH_ALEN - 1) + 1] ^= *src++;
-	}
-# endif
-}
-#endif /* CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE */
-
-struct platform_device s3c_device_android_usb = {
-	.name	= "android_usb",
-	.id	= -1,
-	.dev	= {
-		.platform_data	= &android_usb_pdata,
-	},
-};
-
-static struct usb_mass_storage_platform_data ums_pdata = {
-	.vendor			= "Android",
-	.product		= "UMS Composite",
-	.release		= 1,
-#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-	.nluns			= 2,
-#else
-	.nluns			= 1,
-#endif
-	
-};
-
-struct platform_device s3c_device_usb_mass_storage = {
-	.name	= "usb_mass_storage",
-	.id	= -1,
-	.dev	= {
-		.platform_data = &ums_pdata,
-	},
-};
+#include <s3cfb.h>
 
 /* RTC */
 static struct resource s5p_rtc_resource[] = {
 	[0] = {
-		.start = S5P_PA_RTC,
-		.end   = S5P_PA_RTC + 0xff,
+		.start = S3C_PA_RTC,
+		.end   = S3C_PA_RTC + 0xff,
 		.flags = IORESOURCE_MEM,
 	},
 	[1] = {
@@ -372,33 +67,12 @@ struct platform_device s5p_device_rtc = {
 	.resource         = s5p_rtc_resource,
 };
 
-/* Keypad interface */
-static struct resource s3c_keypad_resource[] = {
-	[0] = {
-		.start = S3C_PA_KEYPAD,
-		.end   = S3C_PA_KEYPAD + S3C_SZ_KEYPAD - 1,
-		.flags = IORESOURCE_MEM,
-	},
-	[1] = {
-		.start = IRQ_KEYPAD,
-		.end   = IRQ_KEYPAD,
-		.flags = IORESOURCE_IRQ,
-	}
-};
-
-struct platform_device s3c_device_keypad = {
-	.name             = "s3c-keypad",
-	.id               = -1,
-	.num_resources    = ARRAY_SIZE(s3c_keypad_resource),
-	.resource         = s3c_keypad_resource,
-};
-
 #ifdef CONFIG_S5P_ADC
 /* ADCTS */
 static struct resource s3c_adc_resource[] = {
 	[0] = {
-		.start = S3C_PA_ADC,
-		.end   = S3C_PA_ADC + SZ_4K - 1,
+		.start = SAMSUNG_PA_ADC,
+		.end   = SAMSUNG_PA_ADC + SZ_4K - 1,
 		.flags = IORESOURCE_MEM,
 	},
 	[1] = {
@@ -502,7 +176,10 @@ static struct s3c_platform_fb default_fb_data __initdata = {
 void __init s3cfb_set_platdata(struct s3c_platform_fb *pd)
 {
 	struct s3c_platform_fb *npd;
-	int i;
+	struct s3cfb_lcd *lcd;
+	phys_addr_t pmem_start;
+	int i, default_win, num_overlay_win;
+	int frame_size;
 
 	if (!pd)
 		pd = &default_fb_data;
@@ -514,24 +191,47 @@ void __init s3cfb_set_platdata(struct s3c_platform_fb *pd)
 		for (i = 0; i < npd->nr_wins; i++)
 			npd->nr_buffers[i] = 1;
 
-		npd->nr_buffers[npd->default_win] = CONFIG_FB_S3C_NR_BUFFERS;
+		default_win = npd->default_win;
+		num_overlay_win = CONFIG_FB_S3C_NUM_OVLY_WIN;
+
+		if (num_overlay_win >= default_win) {
+			printk(KERN_WARNING "%s: NUM_OVLY_WIN should be less than default \
+					window number. set to 0.\n", __func__);
+			num_overlay_win = 0;
+		}
+
+		for (i = 0; i < num_overlay_win; i++)
+			npd->nr_buffers[i] = CONFIG_FB_S3C_NUM_BUF_OVLY_WIN;
+		npd->nr_buffers[default_win] = CONFIG_FB_S3C_NR_BUFFERS;
+
+		lcd = (struct s3cfb_lcd *)npd->lcd;
+		frame_size = (lcd->width * lcd->height * 4);
 
 		s3cfb_get_clk_name(npd->clk_name);
 		npd->backlight_onoff = NULL;
 		npd->clk_on = s3cfb_clk_on;
 		npd->clk_off = s3cfb_clk_off;
 
-		/* starting physical address of memory region */
-		npd->pmem_start = s5p_get_media_memory_bank(S5P_MDEV_FIMD, 1);
-		/* size of memory region */
-		npd->pmem_size = s5p_get_media_memsize_bank(S5P_MDEV_FIMD, 1);
+		/* set starting physical address & size of memory region for overlay
+		 * window */
+		pmem_start = s5p_get_media_memory_bank(S5P_MDEV_FIMD, 1);
+		for (i = 0; i < num_overlay_win; i++) {
+			npd->pmem_start[i] = pmem_start;
+			npd->pmem_size[i] = frame_size * npd->nr_buffers[i];
+			pmem_start += npd->pmem_size[i];
+		}
+
+		/* set starting physical address & size of memory region for default
+		 * window */
+		npd->pmem_start[default_win] = pmem_start;
+		npd->pmem_size[default_win] = frame_size * npd->nr_buffers[default_win];
 
 		s3c_device_fb.dev.platform_data = npd;
 	}
 }
 #endif
 
-#ifdef CONFIG_VIDEO_FIMC
+#if defined(CONFIG_VIDEO_FIMC) || defined(CONFIG_CPU_FREQ) /* TODO: use existing dev */
 static struct resource s3c_fimc0_resource[] = {
 	[0] = {
 		.start	= S5P_PA_FIMC0,
@@ -714,48 +414,6 @@ struct platform_device s3c_device_ipc = {
 	.num_resources	= ARRAY_SIZE(s3c_ipc_resource),
 	.resource	= s3c_ipc_resource,
 };
-static struct resource s3c_csis_resource[] = {
-	[0] = {
-		.start	= S5P_PA_CSIS,
-		.end	= S5P_PA_CSIS + S5P_SZ_CSIS - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	[1] = {
-		.start	= IRQ_MIPICSI,
-		.end	= IRQ_MIPICSI,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device s3c_device_csis = {
-	.name		= "s3c-csis",
-	.id		= 0,
-	.num_resources	= ARRAY_SIZE(s3c_csis_resource),
-	.resource	= s3c_csis_resource,
-};
-
-static struct s3c_platform_csis default_csis_data __initdata = {
-	.srclk_name	= "mout_mpll",
-	.clk_name	= "sclk_csis",
-	.clk_rate	= 166000000,
-};
-
-void __init s3c_csis_set_platdata(struct s3c_platform_csis *pd)
-{
-	struct s3c_platform_csis *npd;
-
-	if (!pd)
-		pd = &default_csis_data;
-
-	npd = kmemdup(pd, sizeof(struct s3c_platform_csis), GFP_KERNEL);
-	if (!npd)
-		printk(KERN_ERR "%s: no memory for platform data\n", __func__);
-
-	npd->cfg_gpio = s3c_csis_cfg_gpio;
-	npd->cfg_phy_global = s3c_csis_cfg_phy_global;
-
-	s3c_device_csis.dev.platform_data = npd;
-}
 #endif
 
 /* JPEG controller  */
@@ -991,22 +649,3 @@ struct platform_device s3c_device_usbgadget = {
 };
 #endif
 
-static struct resource s5p_ace_resource[] = {
-	[0] = {
-		.start = S5P_PA_ACE,
-		.end   = S5P_PA_ACE + S5P_SZ_ACE - 1,
-		.flags = IORESOURCE_MEM,
-	},
-	[1] = {
-		.start = IRQ_SECSS,
-		.end   = IRQ_SECSS,
-		.flags = IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device s5p_device_ace = {
-	.name		= "s5p-ace",
-	.id		= 0,
-	.num_resources	= ARRAY_SIZE(s5p_ace_resource),
-	.resource	= s5p_ace_resource,
-};

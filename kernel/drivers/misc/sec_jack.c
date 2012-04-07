@@ -31,15 +31,13 @@
 #include <linux/gpio_event.h>
 #include <linux/sec_jack.h>
 
-#define MAX_ZONE_LIMIT		10
-/* keep this value if you support double-pressed concept */
-#define SEND_KEY_CHECK_TIME_MS	30		/* 30ms */
-#define DET_CHECK_TIME_MS	400		/* 400ms */
-#define WAKE_LOCK_TIME		(HZ * 5)	/* 5 sec */
-#define NUM_INPUT_DEVICE_ID	2
+#undef pr_debug
+#define pr_debug pr_info
 
-static struct class *jack_class;
-static struct device *jack_dev;
+#define MAX_ZONE_LIMIT		10
+#define SEND_KEY_CHECK_TIME_MS	30		/* 30ms */
+#define DET_CHECK_TIME_MS	200		/* 200ms */
+#define WAKE_LOCK_TIME		(HZ * 5)	/* 5 sec */
 
 struct sec_jack_info {
 	struct sec_jack_platform_data *pdata;
@@ -51,7 +49,7 @@ struct sec_jack_info {
 	struct sec_jack_zone *zone;
 	struct input_handler handler;
 	struct input_handle handle;
-	struct input_device_id ids[NUM_INPUT_DEVICE_ID];
+	struct input_device_id ids;
 	int det_irq;
 	int dev_id;
 	int pressed;
@@ -75,11 +73,6 @@ struct switch_dev switch_jack_detection = {
 	.name = "h2w",
 };
 
-/* To support AT+FCESTEST=1 */
-struct switch_dev switch_sendend = {
-		.name = "send_end",
-};
-
 static struct gpio_event_direct_entry sec_jack_key_map[] = {
 	{
 		.code	= KEY_UNKNOWN,
@@ -90,7 +83,7 @@ static struct gpio_event_input_info sec_jack_key_info = {
 	.info.func = gpio_event_input_func,
 	.info.no_suspend = true,
 	.type = EV_KEY,
-	.debounce_time.tv.nsec = SEND_KEY_CHECK_TIME_MS * NSEC_PER_MSEC,
+	.debounce_time.tv64 = SEND_KEY_CHECK_TIME_MS * NSEC_PER_MSEC,
 	.keymap = sec_jack_key_map,
 	.keymap_size = ARRAY_SIZE(sec_jack_key_map)
 };
@@ -115,9 +108,11 @@ static bool sec_jack_buttons_filter(struct input_handle *handle,
 {
 	struct sec_jack_info *hi = handle->handler->private;
 
+    pr_debug("%s: type=%d, code=%d, value=%d\n", __func__, type, code, value);
 	if (type != EV_KEY || code != KEY_UNKNOWN)
 		return false;
 
+    pr_debug("%s: queueing type=%d, code=%d, value=%d\n", __func__, type, code, value);
 	hi->pressed = value;
 
 	/* This is called in timer handler of gpio_input driver.
@@ -142,6 +137,7 @@ static int sec_jack_buttons_connect(struct input_handler *handler,
 	if (dev->name != sec_jack_input_data.name)
 		return -ENODEV;
 
+    pr_debug("%s\n", __func__);
 	hi = handler->private;
 	pdata = hi->pdata;
 	btn_zones = pdata->buttons_zones;
@@ -180,6 +176,7 @@ static int sec_jack_buttons_connect(struct input_handler *handler,
 
 static void sec_jack_buttons_disconnect(struct input_handle *handle)
 {
+    pr_debug("%s\n", __func__);
 	input_close_device(handle);
 	input_unregister_handle(handle);
 }
@@ -191,11 +188,11 @@ static void sec_jack_set_type(struct sec_jack_info *hi, int jack_type)
 	/* this can happen during slow inserts where we think we identified
 	 * the type but then we get another interrupt and do it again
 	 */
-	if (jack_type == hi->cur_jack_type) {
-		if (jack_type != SEC_HEADSET_4POLE)
-			pdata->set_micbias_state(false);
-		return;
-	}
+ 	if (jack_type == hi->cur_jack_type) {
+ 		if (jack_type != SEC_HEADSET_4POLE)
+ 			pdata->set_micbias_state(false);
+ 		return;
+ 	}
 
 	if (jack_type == SEC_HEADSET_4POLE) {
 		/* for a 4 pole headset, enable detection of send/end key */
@@ -220,30 +217,31 @@ static void sec_jack_set_type(struct sec_jack_info *hi, int jack_type)
 	hi->cur_jack_type = jack_type;
 	pr_info("%s : jack_type = %d\n", __func__, jack_type);
 
+	/* prevent suspend to allow user space to respond to switch */
+	wake_lock_timeout(&hi->det_wake_lock, WAKE_LOCK_TIME);
+
 	switch_set_state(&switch_jack_detection, jack_type);
 }
 
 static void handle_jack_not_inserted(struct sec_jack_info *hi)
 {
+    pr_debug("%s\n", __func__);
 	sec_jack_set_type(hi, SEC_JACK_NO_DEVICE);
 	hi->pdata->set_micbias_state(false);
 }
 
 static void determine_jack_type(struct sec_jack_info *hi)
 {
-	struct sec_jack_platform_data *pdata = hi->pdata;
-	struct sec_jack_zone *zones = pdata->zones;
-	int size = pdata->num_zones;
+	struct sec_jack_zone *zones = hi->pdata->zones;
+	int size = hi->pdata->num_zones;
 	int count[MAX_ZONE_LIMIT] = {0};
 	int adc;
 	int i;
-	unsigned npolarity = !pdata->det_active_high;
+	unsigned npolarity = !hi->pdata->det_active_high;
 
-	/* set mic bias to enable adc */
-	pdata->set_micbias_state(true);
-
-	while (gpio_get_value(pdata->det_gpio) ^ npolarity) {
-		adc = pdata->get_adc_value();
+    pr_debug("%s\n", __func__);
+	while (gpio_get_value(hi->pdata->det_gpio) ^ npolarity) {
+		adc = hi->pdata->get_adc_value();
 		pr_debug("%s: adc = %d\n", __func__, adc);
 
 		/* determine the type of headset based on the
@@ -279,16 +277,18 @@ static irqreturn_t sec_jack_detect_irq_thread(int irq, void *dev_id)
 	struct sec_jack_info *hi = dev_id;
 	struct sec_jack_platform_data *pdata = hi->pdata;
 	int time_left_ms = DET_CHECK_TIME_MS;
-	unsigned npolarity = !pdata->det_active_high;
+	unsigned npolarity = !hi->pdata->det_active_high;
 
-	/* prevent suspend to allow user space to respond to switch */
-	wake_lock_timeout(&hi->det_wake_lock, WAKE_LOCK_TIME);
+    pr_debug("%s", __func__);
+
+	/* set mic bias to enable adc */
+	pdata->set_micbias_state(true);
 
 	/* debounce headset jack.  don't try to determine the type of
 	 * headset until the detect state is true for a while.
 	 */
 	while (time_left_ms > 0) {
-		if (!(gpio_get_value(pdata->det_gpio) ^ npolarity)) {
+		if (!(gpio_get_value(hi->pdata->det_gpio) ^ npolarity)) {
 			/* jack not detected. */
 			handle_jack_not_inserted(hi);
 			return IRQ_HANDLED;
@@ -301,6 +301,33 @@ static irqreturn_t sec_jack_detect_irq_thread(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void sec_jack_init_jack_state(struct sec_jack_info *hi)
+{
+	struct sec_jack_platform_data *pdata = hi->pdata;
+	int time_left_ms = DET_CHECK_TIME_MS;
+	unsigned npolarity = !hi->pdata->det_active_high;
+
+    pr_debug("%s", __func__);
+
+	/* set mic bias to enable adc */
+	pdata->set_micbias_state(true);
+
+	/* debounce headset jack.  don't try to determine the type of
+	 * headset until the detect state is true for a while.
+	 */
+	while (time_left_ms > 0) {
+		if (!(gpio_get_value(hi->pdata->det_gpio) ^ npolarity)) {
+			/* jack not detected. */
+			handle_jack_not_inserted(hi);
+			return;
+		}
+		msleep(10);
+		time_left_ms -= 10;
+	}
+	/* jack presence was detected the whole time, figure out which type */
+	determine_jack_type(hi);
+}
+
 /* thread run whenever the button of headset is pressed or released */
 void sec_jack_buttons_work(struct work_struct *work)
 {
@@ -311,67 +338,31 @@ void sec_jack_buttons_work(struct work_struct *work)
 	int adc;
 	int i;
 
-	/* prevent suspend to allow user space to respond to switch */
-	wake_lock_timeout(&hi->det_wake_lock, WAKE_LOCK_TIME);
-
 	/* when button is released */
 	if (hi->pressed == 0) {
 		input_report_key(hi->input_dev, hi->pressed_code, 0);
-		switch_set_state(&switch_sendend, 0);
 		input_sync(hi->input_dev);
-		pr_info("%s: keycode=%d, is released\n", __func__,
+		pr_debug("%s: keycode=%d, is released\n", __func__,
 			hi->pressed_code);
 		return;
 	}
 
 	/* when button is pressed */
 	adc = pdata->get_adc_value();
-
+    pr_debug("%s: adc=%d\n", __func__, adc);
 	for (i = 0; i < pdata->num_buttons_zones; i++)
 		if (adc >= btn_zones[i].adc_low &&
 		    adc <= btn_zones[i].adc_high) {
 			hi->pressed_code = btn_zones[i].code;
 			input_report_key(hi->input_dev, btn_zones[i].code, 1);
-			switch_set_state(&switch_sendend, 1);
 			input_sync(hi->input_dev);
-			pr_info("%s: keycode=%d, is pressed\n", __func__,
+			pr_debug("%s: keycode=%d, is pressed\n", __func__,
 				btn_zones[i].code);
 			return;
 		}
 
 	pr_warn("%s: key is skipped. ADC value is %d\n", __func__, adc);
 }
-
-static ssize_t select_jack_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	pr_info("%s : operate nothing\n", __func__);
-
-	return 0;
-}
-
-static ssize_t select_jack_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct sec_jack_info *hi = dev_get_drvdata(dev);
-	struct sec_jack_platform_data *pdata = hi->pdata;
-	int value = 0;
-
-
-	sscanf(buf, "%d", &value);
-	pr_err("%s: User  selection : 0X%x", __func__, value);
-	if (value == SEC_HEADSET_4POLE) {
-		pdata->set_micbias_state(true);
-		msleep(100);
-	}
-
-	sec_jack_set_type(hi, value);
-
-	return size;
-}
-
-static DEVICE_ATTR(select_jack, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH,
-	select_jack_show, select_jack_store);
 
 static int sec_jack_probe(struct platform_device *pdev)
 {
@@ -399,6 +390,10 @@ static int sec_jack_probe(struct platform_device *pdev)
 
 	sec_jack_key_map[0].gpio = pdata->send_end_gpio;
 
+	/* If no other keys in pdata, make all keys default to KEY_MEDIA */
+	if (pdata->num_buttons_zones == 0)
+		sec_jack_key_map[0].code = KEY_MEDIA;
+
 	hi = kzalloc(sizeof(struct sec_jack_info), GFP_KERNEL);
 	if (hi == NULL) {
 		pr_err("%s : Failed to allocate memory.\n", __func__);
@@ -408,7 +403,7 @@ static int sec_jack_probe(struct platform_device *pdev)
 
 	hi->pdata = pdata;
 
-	/* make the id of our gpio_event device the same as our platform device,
+	/* make the id of our gpi_event device the same as our platform device,
 	 * which makes it the responsiblity of the board file to make sure
 	 * it is unique relative to other gpio_event devices
 	 */
@@ -427,11 +422,6 @@ static int sec_jack_probe(struct platform_device *pdev)
 		goto err_switch_dev_register;
 	}
 
-	ret = switch_dev_register(&switch_sendend);
-	if (ret < 0) {
-		printk(KERN_ERR "SEC JACK: Failed to register switch device\n");
-		goto err_switch_dev_register_send_end;
-	}
 	wake_lock_init(&hi->det_wake_lock, WAKE_LOCK_SUSPEND, "sec_jack_det");
 
 	INIT_WORK(&hi->buttons_work, sec_jack_buttons_work);
@@ -444,27 +434,13 @@ static int sec_jack_probe(struct platform_device *pdev)
 
 	hi->det_irq = gpio_to_irq(pdata->det_gpio);
 
-	jack_class = class_create(THIS_MODULE, "jack");
-	if (IS_ERR(jack_class))
-		pr_err("Failed to create class(sec_jack)\n");
-
-	/* support PBA function test */
-	jack_dev = device_create(jack_class, NULL, 0, hi, "jack_selector");
-	if (IS_ERR(jack_dev))
-		pr_err("Failed to create device(sec_jack)!= %ld\n",
-			IS_ERR(jack_dev));
-
-	if (device_create_file(jack_dev, &dev_attr_select_jack) < 0)
-		pr_err("Failed to create device file(%s)!\n",
-			dev_attr_select_jack.attr.name);
-
-	set_bit(EV_KEY, hi->ids[0].evbit);
-	hi->ids[0].flags = INPUT_DEVICE_ID_MATCH_EVBIT;
+	set_bit(EV_KEY, hi->ids.evbit);
+	hi->ids.flags = INPUT_DEVICE_ID_MATCH_EVBIT;
 	hi->handler.filter = sec_jack_buttons_filter;
 	hi->handler.connect = sec_jack_buttons_connect;
 	hi->handler.disconnect = sec_jack_buttons_disconnect;
 	hi->handler.name = "sec_jack_buttons";
-	hi->handler.id_table = hi->ids;
+	hi->handler.id_table = &hi->ids;
 	hi->handler.private = hi;
 
 	ret = input_register_handler(&hi->handler);
@@ -490,6 +466,15 @@ static int sec_jack_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(&pdev->dev, hi);
 
+#if defined (CONFIG_SAMSUNG_CAPTIVATE) || defined(CONFIG_SAMSUNG_VIBRANT)
+	pdata->det_active_high = 1;
+#else
+	pdata->det_active_high = 0;
+#endif
+
+    /* initialize headset jack state */
+    sec_jack_init_jack_state(hi);
+
 	return 0;
 
 err_enable_irq_wake:
@@ -500,8 +485,6 @@ err_register_input_handler:
 	destroy_workqueue(hi->queue);
 err_create_wq_failed:
 	wake_lock_destroy(&hi->det_wake_lock);
-	switch_dev_unregister(&switch_sendend);
-err_switch_dev_register_send_end:
 	switch_dev_unregister(&switch_jack_detection);
 err_switch_dev_register:
 	gpio_free(pdata->det_gpio);
@@ -528,7 +511,6 @@ static int sec_jack_remove(struct platform_device *pdev)
 	}
 	input_unregister_handler(&hi->handler);
 	wake_lock_destroy(&hi->det_wake_lock);
-	switch_dev_unregister(&switch_sendend);
 	switch_dev_unregister(&switch_jack_detection);
 	gpio_free(hi->pdata->det_gpio);
 	kfree(hi);

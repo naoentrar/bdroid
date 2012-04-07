@@ -14,32 +14,21 @@
 
 #include <linux/cpufreq.h>
 
-/*
- * APLL M,P,S value for target frequency
- **/
-#define APLL_VAL_1664	((1<<31)|(417<<16)|(3<<8)|(0))
-#define APLL_VAL_1332	((1<<31)|(444<<16)|(4<<8)|(0))
-#define APLL_VAL_1200	((1<<31)|(150<<16)|(3<<8)|(1))
-#define APLL_VAL_1000	((1<<31)|(125<<16)|(3<<8)|(1))
-#define APLL_VAL_800	((1<<31)|(100<<16)|(3<<8)|(1))
-
 enum perf_level {
-	L0 = 0,	// 1GHz
-	L1,	// 800MHz
-	L2,	// 400MHz
-	L3,	// 200MHz
-	L4,	// 100MHz
-	MAX_PERF_LEVEL = L4,
+	L0, L1, L2, L3, L4, MAX_PERF_LEVEL = L4,
 };
 
-#define SLEEP_FREQ      (800 * 1000) /* Use 800MHz when entering sleep */
-#define ULP_FREQ	(800 * 1000)
+/* For cpu-freq driver */
+struct s5pv210_cpufreq_voltage {
+	unsigned int	freq;	/* kHz */
+	unsigned long	varm;	/* uV */
+	unsigned long	vint;	/* uV */
+};
 
-/* additional symantics for "relation" in cpufreq with pm */
-#define DISABLE_FURTHER_CPUFREQ         0x10
-#define ENABLE_FURTHER_CPUFREQ          0x20
-#define MASK_FURTHER_CPUFREQ            0x30
-/* With 0x00(NOCHANGE), it depends on the previous "further" status */
+struct s5pv210_cpufreq_data {
+	struct s5pv210_cpufreq_voltage	*volt;
+	unsigned int			size;
+};
 
 #ifdef CONFIG_DVFS_LIMIT
 enum {
@@ -58,5 +47,7 @@ enum {
 extern void s5pv210_lock_dvfs_high_level(uint nToken, uint perf_level);
 extern void s5pv210_unlock_dvfs_high_level(unsigned int nToken);
 #endif
+
+extern void s5pv210_cpufreq_set_platdata(struct s5pv210_cpufreq_data *pdata);
 
 #endif /* __ASM_ARCH_CPU_FREQ_H */
