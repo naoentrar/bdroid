@@ -1,0 +1,3 @@
+To build you have to get toolchain installed and its "bin" directory added to your PATH (Sourcery_G++_Lite2009Q3a is recommended)
+Execute /kernel/build.sh
+
