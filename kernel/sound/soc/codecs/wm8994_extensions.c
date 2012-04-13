@@ -1764,7 +1764,7 @@ unsigned int wm8994_extensions_write(struct snd_soc_codec *codec_,
                "input_source=%i, "
 #endif
 #if !defined(M110S) && !defined(GALAXY_TAB_TEGRA) && !defined(GALAXY_TAB)
-               "output_source=%i, "
+         //      "output_source=%i, "
 #endif
                "power_state=%i\n",
                reg, value,
@@ -1777,7 +1777,7 @@ unsigned int wm8994_extensions_write(struct snd_soc_codec *codec_,
                wm8994->input_source,
 #endif
 #if !defined(M110S) && !defined(GALAXY_TAB_TEGRA) && !defined(GALAXY_TAB)
-               wm8994->output_source,
+          //     wm8994->output_source,
 #endif
                wm8994->power_state);
 #else
