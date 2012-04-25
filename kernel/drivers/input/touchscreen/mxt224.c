@@ -365,7 +365,7 @@ static irqreturn_t mxt224_irq_thread(int irq, void *ptr)
 			data->finger_mask |= 1U << id;
 			touch_state_val = 1;
 
-			printk(KERN_INFO "finger %d x=%d y=%d\n", id, data->fingers[id].x, data->fingers[id].y);
+			//printk(KERN_INFO "finger %d x=%d y=%d\n", id, data->fingers[id].x, data->fingers[id].y);
 		} else if ((msg[1] & SUPPRESS_MSG_MASK) &&
 			   (data->fingers[id].z != -1)) {
 			data->fingers[id].z = -1;
