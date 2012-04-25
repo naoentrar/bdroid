@@ -36,8 +36,8 @@ on fs
 #    mount ext4 /dev/block/platform/s3c-sdhci.0/by-name/system /system wait ro
 #    mount ext4 /dev/block/platform/s3c-sdhci.0/by-name/userdata /data wait noatime nosuid nodev nomblk_io_submit
 
-    mount ext4 /dev/block/platform/s3c-sdhci.2/by-name/androsys /system wait ro
-    mount ext4 /dev/block/platform/s3c-sdhci.2/by-name/androusr /data wait noatime nosuid nodev nomblk_io_submit
+    mount ext2 /dev/block/platform/s3c-sdhci.2/by-num/p3 /data wait noatime nosuid nodev nomblk_io_submit
+    mount ext2 /dev/block/platform/s3c-sdhci.2/by-num/p2 /system wait ro
 
     export EXTERNAL_STORAGE /mnt/sdcard
     mkdir /mnt/sdcard 0000 system system
