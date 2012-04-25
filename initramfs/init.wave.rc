@@ -6,6 +6,7 @@ on boot
     setprop ro.build.product wave
     setprop ro.product.device wave
     setprop ro.radio.noril yes
+# setprop ro.boot.console "/dev/ttySAC2"
 #    setprop ro.bt.bdaddr_path "/efs/bluetooth/bt_addr"
 
 # fake some battery state
