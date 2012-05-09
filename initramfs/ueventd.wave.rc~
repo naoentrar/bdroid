@@ -10,8 +10,8 @@
 /dev/s3c-mfc              0660   media      media
 
 /dev/modem_ctl            0660   radio      radio
-# /dev/modem_fmt            0660   radio      radio
-# /dev/modem_rfs            0660   radio      radio
+/dev/modem_fmt            0660   radio      radio
+/dev/modem_rfs            0660   radio      radio
 /dev/s3c2410_serial3      0660   radio      radio
 /dev/block/mtdblock5      0660   radio      radio
 /dev/mtd/mtd5ro           0660   radio      radio
@@ -22,4 +22,4 @@
 /dev/accelerometer        0660   system     system
 
 # for GPS
-# /dev/s3c2410_serial1      0600   gps        gps
+/dev/s3c2410_serial1      0600   gps        gps

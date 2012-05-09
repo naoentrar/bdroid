@@ -36,7 +36,7 @@ chmod 777 /data/
 #    mount ext4 /dev/block/platform/s3c-sdhci.0/by-name/system /system wait ro
 #    mount ext4 /dev/block/platform/s3c-sdhci.0/by-name/userdata /data wait noatime nosuid nodev nomblk_io_submit
 
-    	mount ext2 /dev/block/platform/s3c-sdhci.2/by-num/p2 /system ro noatime
+    	mount ext2 /dev/block/platform/s3c-sdhci.2/by-num/p2 /system ro noatime check=no
 	mkdir /andropart 0777 system system
     	mount ext2 /dev/block/platform/s3c-sdhci.2/by-num/p3 /andropart noatime check=no
 	symlink /andropart/data /data
